@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -46,9 +45,75 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
  #bottomPanel{max-height:31vh}
 }
 
+
+#titleScreen{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;overflow:auto;padding:22px;background:linear-gradient(180deg,#9bbbc7 0%,#d8c9a0 45%,#526d4c 75%,#20382b 100%);color:#fff}
+#titleScreen.hidden{display:none}
+#titleScreen:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(28,54,37,.38),rgba(28,54,37,.04) 55%,rgba(28,54,37,.25));pointer-events:none}
+.titleLandscape{position:absolute;left:0;right:0;bottom:0;height:36%;overflow:hidden;opacity:.7;pointer-events:none}
+.titleHill{position:absolute;bottom:-18%;width:70%;height:90%;border-radius:50% 50% 0 0;background:#294b37}
+.titleHill.one{left:-10%;transform:rotate(-8deg)}.titleHill.two{right:-14%;height:110%;background:#1e3b30;transform:rotate(9deg)}
+.titleCity{position:absolute;right:4%;bottom:0;display:flex;align-items:flex-end;gap:7px;height:85%}
+.titleCity i{display:block;width:clamp(13px,3vw,32px);background:#203a31;border-radius:3px 3px 0 0;box-shadow:inset 0 9px rgba(255,255,255,.05)}
+.titleCity i:nth-child(1){height:35%}.titleCity i:nth-child(2){height:62%}.titleCity i:nth-child(3){height:48%}.titleCity i:nth-child(4){height:85%}.titleCity i:nth-child(5){height:56%}.titleCity i:nth-child(6){height:72%}.titleCity i:nth-child(7){height:42%}
+.titleContent{position:relative;z-index:1;width:min(560px,100%);padding:clamp(20px,5vw,38px);border:1px solid rgba(255,255,255,.35);border-radius:22px;background:rgba(20,38,29,.78);box-shadow:0 18px 55px rgba(0,0,0,.25);backdrop-filter:blur(8px);text-align:center}
+.titleContent h1{font-size:clamp(25px,5vw,40px);line-height:1.35;margin:0 0 8px;letter-spacing:.05em}
+.titleSubtitle{font-size:12px;color:#d7e4d5;margin:0 0 24px;letter-spacing:.12em}
+.titleButtons{display:grid;gap:9px;max-width:340px;margin:0 auto}
+.titleButton{width:100%;min-height:46px;border:1px solid #a6bd96;border-radius:10px;background:linear-gradient(180deg,#58794e,#38583c);color:white;font-size:15px;font-weight:600;padding:11px 16px}
+.titleButton.secondary{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.28);font-size:13px;min-height:40px}
+.titleButton:disabled{opacity:.38}
+.titleFoot{font-size:10px;color:#c4d1c1;margin:20px 0 0}
+.titleSubscreen{display:none;text-align:left}.titleSubscreen.active{display:block}
+.titleSubscreen h2{text-align:center;margin:0 0 18px;font-size:21px}
+.settingRow{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;font-size:13px}
+.settingRow select{width:52%;max-width:210px;min-height:38px;border-radius:8px;border:1px solid #81967a;background:#f4f5ed;color:#243326;padding:6px;font-size:13px}
+.titleActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:20px}
+.titleNote{font-size:11px;color:#d2dfcf;line-height:1.6;margin:14px 0 0}
+@media(max-width:520px){#titleScreen{padding:12px}.titleContent{padding:22px 17px}.titleButtons{gap:8px}.titleButton{min-height:43px}}
+
 </style>
 </head>
 <body>
+
+<div id="titleScreen">
+ <div class="titleLandscape"><div class="titleHill one"></div><div class="titleHill two"></div><div class="titleCity"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+ <div class="titleContent">
+  <section id="homeMenu">
+   <h1>文明発展<br>シミュレーション</h1>
+   <p class="titleSubtitle">小さな集落から、広大な文明へ。</p>
+   <div class="titleButtons">
+    <button class="titleButton" id="newGameButton">ニューゲーム</button>
+    <button class="titleButton" id="continueButton">続きから</button>
+    <button class="titleButton secondary" id="saveManageButton">セーブデータ管理</button>
+    <button class="titleButton secondary" id="settingsButton">設定</button>
+    <button class="titleButton secondary" id="howToButton">遊び方</button>
+   </div>
+   <p class="titleFoot">音声なし · オフラインでも遊べる文明シミュレーション</p>
+  </section>
+  <section id="newGameScreen" class="titleSubscreen">
+   <h2>ニューゲーム設定</h2>
+   <label class="settingRow">世界の規模<select id="worldSizeSelect"><option value="small">小</option><option value="medium" selected>標準</option><option value="large">大</option><option value="xlarge">特大</option></select></label>
+   <label class="settingRow">資源の豊富さ<select id="resourcesSelect"><option value="low">少なめ</option><option value="normal" selected>標準</option><option value="high">豊富</option></select></label>
+   <label class="settingRow">他文明の数<select id="civCountSelect"><option value="few">少なめ</option><option value="normal" selected>標準</option><option value="many">多め</option></select></label>
+   <label class="settingRow">災害の頻度<select id="disasterSelect"><option value="low">低い</option><option value="normal" selected>標準</option><option value="high">高い</option></select></label>
+   <p class="titleNote">世界は開始時に新しく生成されます。現在、世界規模と資源量が地形・自然物に反映されます。他文明と災害の設定は、対応する仕組みの実装時に反映されます。</p>
+   <div class="titleActions"><button class="titleButton secondary" data-home="1">戻る</button><button class="titleButton" id="startNewWorldButton">世界を生成</button></div>
+  </section>
+  <section id="settingsScreen" class="titleSubscreen">
+   <h2>設定</h2><p class="titleNote">ゲーム内の設定項目は、開発に合わせて順次追加します。現在はタッチ操作に対応しています。</p>
+   <div class="titleActions"><button class="titleButton secondary" data-home="1">戻る</button></div>
+  </section>
+  <section id="howToScreen" class="titleSubscreen">
+   <h2>遊び方</h2><p class="titleNote">人口5人の小さな集落から始まります。建設メニューで建物を選び、地面をタップして配置します。木材・石材・資金を使って集落を広げ、食料を確保しながら人口と文明を発展させましょう。<br><br>1本指ドラッグ：地形を移動<br>2本指ピンチ：拡大・縮小<br>2本指回転：視点を回転</p>
+   <div class="titleActions"><button class="titleButton secondary" data-home="1">戻る</button></div>
+  </section>
+  <section id="saveManageScreen" class="titleSubscreen">
+   <h2>セーブデータ管理</h2><p id="saveManageInfo" class="titleNote">この世界のセーブデータを確認します。</p>
+   <div class="titleActions"><button class="titleButton secondary" data-home="1">戻る</button><button class="titleButton" id="manageContinueButton">このデータを開く</button></div>
+  </section>
+ </div>
+</div>
+
 <div id="game"></div>
 
 <div id="hud">
@@ -81,10 +146,10 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 <div id="panel">
 <h2>文明発展シミュレーション</h2>
 <p>未開拓の大陸</p>
-<p>地形生成・文明シミュレーション 0.6.1</p>
+<p>地形生成・文明シミュレーション 0.7.0</p>
 <p id="worldInfo">世界を生成中...</p>
 </div>
-<div id="status">文明シミュレーション 0.6.1</div>
+<div id="status">文明シミュレーション 0.7.0</div>
 <div id="help">1本指ドラッグ：視点操作　ピンチ：拡大・縮小　建物を選んで地面をタップ：建設</div>
 
 <script type="importmap">
@@ -101,9 +166,10 @@ import * as THREE from "three";
 import {OrbitControls} from "three/addons/controls/OrbitControls.js";
 
 const container=document.getElementById("game");
-const WORLD_SIZE=220;
+const savedWorldSettings=(()=>{try{return JSON.parse(localStorage.getItem("civilizationNewGameSettingsV1")||"{}")}catch(e){return {}}})();
+const WORLD_SIZE=({small:180,medium:220,large:280,xlarge:340}[savedWorldSettings.worldSize]||220);
 const HALF=WORLD_SIZE/2;
-const GRID=180;
+const GRID=Math.round(WORLD_SIZE*0.82);
 const SEED=(()=>{
  const key="civilizationWorldSeedV6";
  const existing=localStorage.getItem(key);
@@ -461,7 +527,7 @@ const leafGeometry=new THREE.ConeGeometry(0.85,2.5,6);
 const trunkMaterial=new THREE.MeshStandardMaterial({color:0x705039});
 const leafMaterial=new THREE.MeshStandardMaterial({color:0xffffff});
 
-const MAX_TREES=2200;
+const MAX_TREES=Math.round(2200*({low:0.65,normal:1,high:1.4}[savedWorldSettings.resources]||1));
 const treeTrunks=new THREE.InstancedMesh(trunkGeometry,trunkMaterial,MAX_TREES);
 const treeLeaves=new THREE.InstancedMesh(leafGeometry,leafMaterial,MAX_TREES);
 const dummy=new THREE.Object3D();
@@ -529,7 +595,7 @@ if(treeLeaves.instanceColor)treeLeaves.instanceColor.needsUpdate=true;
 scene.add(treeTrunks,treeLeaves);
 
 // 岩場：高地や山のふもとに小さな岩を配置する。
-const MAX_ROCKS=520;
+const MAX_ROCKS=Math.round(520*({low:0.65,normal:1,high:1.4}[savedWorldSettings.resources]||1));
 const rockGeometry=new THREE.DodecahedronGeometry(1,0);
 const rockMaterial=new THREE.MeshStandardMaterial({color:0x77776e,roughness:1});
 const rocks=new THREE.InstancedMesh(rockGeometry,rockMaterial,MAX_ROCKS);
@@ -609,6 +675,8 @@ const buildingTypes={
  well:{name:"井戸",cost:{wood:7,stone:2,money:10},size:1,water:1,color:0x477f9a,desc:"集落の生活環境を改善。"},
  plaza:{name:"広場",cost:{wood:10,stone:5,money:15},size:2,happiness:1,color:0x9d9b80,desc:"住民の満足度を改善。"}
 };
+const SAVE_KEY="civilizationSimulationSaveV6_"+SEED;
+let gameStarted=false;
 const buildingMeshes=new Map();
 const buildingGroup=new THREE.Group();
 scene.add(buildingGroup);
@@ -756,7 +824,7 @@ function saveGame(notify=true){
   position:camera.position.toArray(),target:controls.target.toArray()
  }};
  try{
-  localStorage.setItem("civilizationSimulationSaveV6",JSON.stringify(data));
+  localStorage.setItem(SAVE_KEY,JSON.stringify(data));
   if(notify)showMessage("ゲームを保存しました");
  }catch(e){showMessage("保存できませんでした。空き容量を確認してください");}
 }
@@ -775,8 +843,11 @@ function loadGameData(data){
 }
 function loadGame(){
  try{
-  const raw=localStorage.getItem("civilizationSimulationSaveV6");
-  if(raw){loadGameData(JSON.parse(raw));showMessage("前回のセーブを読み込みました");}
+  const raw=localStorage.getItem(SAVE_KEY);
+  const legacy=localStorage.getItem("civilizationSimulationSaveV6");
+  const legacyData=legacy?JSON.parse(legacy):null;
+  const usableLegacy=legacyData&&legacyData.seed===SEED?legacy:null;
+  if(raw||usableLegacy){loadGameData(JSON.parse(raw||usableLegacy));showMessage("前回のセーブを読み込みました");}
   else{
    // 新しい文明の初期集落。住居と小さな農地から開始する。
    gameState.buildings=[
@@ -890,13 +961,75 @@ document.getElementById("importFile").addEventListener("change",async e=>{
  e.target.value="";
 });
 buildMenu();
-loadGame();
 updateHUD();
 setInterval(()=>{
- if(gameState.paused)return;
+ if(!gameStarted||gameState.paused)return;
  gameState.elapsed++;
  if(gameState.elapsed>=24){gameState.elapsed=0;advanceDay();}
 },1000);
+
+function showTitleSection(id){
+ document.querySelectorAll(".titleSubscreen").forEach(el=>el.classList.remove("active"));
+ document.getElementById("homeMenu").style.display=id==="homeMenu"?"block":"none";
+ if(id!=="homeMenu")document.getElementById(id).classList.add("active");
+}
+function hasCurrentSave(){
+ if(localStorage.getItem(SAVE_KEY))return true;
+ try{const old=JSON.parse(localStorage.getItem("civilizationSimulationSaveV6")||"null");return !!old&&old.seed===SEED;}catch(e){return false;}
+}
+function enterGame(mode){
+ document.getElementById("titleScreen").classList.add("hidden");
+ gameStarted=true;
+ if(mode==="continue")loadGame();
+ else loadGame();
+ gameState.paused=false;updateHUD();
+}
+document.getElementById("newGameButton").addEventListener("click",()=>{
+ const settings=savedWorldSettings;
+ document.getElementById("worldSizeSelect").value=settings.worldSize||"medium";
+ document.getElementById("resourcesSelect").value=settings.resources||"normal";
+ document.getElementById("civCountSelect").value=settings.civCount||"normal";
+ document.getElementById("disasterSelect").value=settings.disaster||"normal";
+ showTitleSection("newGameScreen");
+});
+document.getElementById("startNewWorldButton").addEventListener("click",()=>{
+ const settings={
+  worldSize:document.getElementById("worldSizeSelect").value,
+  resources:document.getElementById("resourcesSelect").value,
+  civCount:document.getElementById("civCountSelect").value,
+  disaster:document.getElementById("disasterSelect").value
+ };
+ localStorage.setItem("civilizationNewGameSettingsV1",JSON.stringify(settings));
+ const newSeed=Math.floor(Math.random()*2147483646)+1;
+ localStorage.setItem("civilizationWorldSeedV6",String(newSeed));
+ localStorage.setItem("civilizationPendingNewGameV1","1");
+ location.reload();
+});
+document.getElementById("continueButton").addEventListener("click",()=>{
+ if(hasCurrentSave())enterGame("continue");
+});
+document.getElementById("manageContinueButton").addEventListener("click",()=>{
+ if(hasCurrentSave())enterGame("continue");
+});
+document.getElementById("saveManageButton").addEventListener("click",()=>{
+ const exists=hasCurrentSave();
+ document.getElementById("saveManageInfo").textContent=exists?"この世界のセーブデータが見つかりました。続きから再開できます。":"この世界にはまだセーブデータがありません。ニューゲームから開始してください。";
+ document.getElementById("manageContinueButton").disabled=!exists;
+ showTitleSection("saveManageScreen");
+});
+document.getElementById("settingsButton").addEventListener("click",()=>showTitleSection("settingsScreen"));
+document.getElementById("howToButton").addEventListener("click",()=>showTitleSection("howToScreen"));
+document.querySelectorAll("[data-home]").forEach(btn=>btn.addEventListener("click",()=>showTitleSection("homeMenu")));
+const continueButton=document.getElementById("continueButton");
+continueButton.disabled=!hasCurrentSave();
+if(localStorage.getItem("civilizationPendingNewGameV1")==="1"){
+ localStorage.removeItem("civilizationPendingNewGameV1");
+ enterGame("new");
+}else{
+ gameState.paused=true;
+ updateHUD();
+}
+
 window.addEventListener("beforeunload",()=>saveGame(false));
 // ===== 文明シミュレーション本体ここまで =====
 
