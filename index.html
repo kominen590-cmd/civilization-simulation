@@ -68,6 +68,13 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 .titleNote{font-size:12px;color:#d4e0eb;line-height:1.65;margin:12px 0 0}
 .titleActions.single{grid-template-columns:1fr}
 .titleFile{display:none}
+#startBriefing{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(8,17,13,.78);color:#fff}
+#startBriefing.active{display:flex}
+#startBriefingCard{width:min(520px,94vw);max-height:88dvh;overflow:auto;padding:22px;border:1px solid #9fb49a;border-radius:16px;background:rgba(23,37,28,.98);box-shadow:0 16px 50px #0009}
+#startBriefingCard h2{margin:0 0 10px;font-size:21px}
+#startBriefingCard p,#startBriefingCard li{font-size:13px;line-height:1.7;color:#e0e9dc}
+#startBriefingCard ul{padding-left:20px;margin:10px 0 16px}
+#startBriefingCard .titleButton{margin-top:8px}
 @media(max-width:520px){.titleSubscreen{width:92%;padding:18px 15px}.settingRow{font-size:12px}.settingRow select{font-size:12px;min-height:38px}}
 
 </style>
@@ -123,6 +130,19 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
  </div>
 </div>
 
+<div id="startBriefing" aria-modal="true" role="dialog" aria-labelledby="startBriefingTitle">
+ <div id="startBriefingCard">
+  <h2 id="startBriefingTitle">新しい文明の始まり</h2>
+  <p>世界が完成しました。あなたの文明は住民5人の小さな集落から始まります。</p>
+  <ul>
+   <li>住居と小さな農場が最初から建っています。</li>
+   <li>建設メニューから建物を選び、地面をタップして配置できます。</li>
+   <li>食料・木材・石材と住民の働き手を確認しながら発展させましょう。</li>
+   <li>時間は停止中です。準備ができたら右上の「時間を再開」を押してください。</li>
+  </ul>
+  <button class="titleButton" id="closeStartBriefing">集落を確認する</button>
+ </div>
+</div>
 <div id="game"></div>
 
 <div id="hud">
@@ -924,7 +944,7 @@ function loadGameData(data){
  }
 }
 function initializeNewGame(){
- gameState.day=1;gameState.year=1;gameState.season=0;gameState.paused=false;gameState.elapsed=0;
+ gameState.day=1;gameState.year=1;gameState.season=0;gameState.paused=true;gameState.elapsed=0;
  gameState.population=5;gameState.money=120;gameState.food=80;gameState.wood=35;gameState.stone=15;
  gameState.housing=8;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.buildings=[];gameState.selected=null;
  gameState.nextId=1;gameState.foodProduced=0;gameState.woodProduced=0;gameState.stoneProduced=0;
@@ -1119,12 +1139,35 @@ function hasCurrentSave(){
   return !!old&&old.version===6&&Number(old.seed)===SEED&&!!old.state;
  }catch(e){return false;}
 }
+function showStartBriefing(){
+ const panel=document.getElementById("startBriefing");
+ if(localStorage.getItem("civilizationIntroSeenV1")!=="1"){
+  panel.classList.add("active");
+ }else{
+  gameState.paused=true;
+  updateHUD();
+ }
+}
 function enterGame(mode){
  document.getElementById("titleScreen").classList.add("hidden");
  gameStarted=true;
- if(mode==="new")initializeNewGame();else loadGame();
- gameState.paused=false;updateHUD();
+ if(mode==="new"){
+  initializeNewGame();
+  gameState.paused=true;
+  showStartBriefing();
+ }else{
+  loadGame();
+  gameState.paused=false;
+ }
+ updateHUD();
 }
+document.getElementById("closeStartBriefing").addEventListener("click",()=>{
+ localStorage.setItem("civilizationIntroSeenV1","1");
+ document.getElementById("startBriefing").classList.remove("active");
+ gameState.paused=true;
+ updateHUD();
+ showMessage("時間停止中。準備ができたら再開できます");
+});
 document.getElementById("hitNewGame").addEventListener("click",()=>{
  const settings=savedWorldSettings;
  document.getElementById("worldSizeSelect").value=settings.worldSize||"medium";
