@@ -749,8 +749,9 @@ function footprintCellKeys(type,x,z){
  }
  return keys;
 }
+let exploredCellSet=new Set();
 function isCellExplored(ix,iz){
- return Array.isArray(gameState.exploredCells)&&gameState.exploredCells.includes(ix+","+iz);
+ return exploredCellSet.has(ix+","+iz);
 }
 function footprintTerrainValid(type,x,z){
  const size=buildingTypes[type]?.size||1;
@@ -782,6 +783,7 @@ function resetInitialExploration(){
   if(isStartingPlain(p.x,p.z))found.add(ix+","+iz);
  }
  gameState.exploredCells=[...found];
+ exploredCellSet=found;
 }
 function updateFogMesh(){
  if(fogMesh){
@@ -822,7 +824,6 @@ function updateFogMesh(){
 }
 function revealAroundCamera(){
  const cx=worldToCell(controls.target.x),cz=worldToCell(controls.target.z);
- const next=new Set(gameState.exploredCells||[]);
  let changed=false;
  for(let dz=-EXPLORATION_RADIUS;dz<=EXPLORATION_RADIUS;dz++){
   for(let dx=-EXPLORATION_RADIUS;dx<=EXPLORATION_RADIUS;dx++){
@@ -832,11 +833,11 @@ function revealAroundCamera(){
    const p=cellWorldCenter("hut",ix,iz);
    if(!terrainData(p.x,p.z).land)continue;
    const key=ix+","+iz;
-   if(!next.has(key)){next.add(key);changed=true;}
+   if(!exploredCellSet.has(key)){exploredCellSet.add(key);changed=true;}
   }
  }
  if(changed){
-  gameState.exploredCells=[...next];
+  gameState.exploredCells=[...exploredCellSet];
   updateFogMesh();
   saveGame(false);
  }
@@ -1103,6 +1104,7 @@ function loadGameData(data){
  gameState.firstCellSelected=!!s.firstCellSelected;
  gameState.completedStartGoals=Array.isArray(s.completedStartGoals)?s.completedStartGoals.filter(id=>START_GOALS.some(g=>g.id===id)):[];
  gameState.exploredCells=Array.isArray(s.exploredCells)?s.exploredCells.filter(key=>/^\d+,\d+$/.test(key)):[];
+ exploredCellSet=new Set(gameState.exploredCells);
  gameState.buildings=Array.isArray(s.buildings)?s.buildings.filter(b=>buildingTypes[b.type]&&Number.isFinite(b.x)&&Number.isFinite(b.z)): [];
  gameState.paused=!!s.paused;
  restoreBuildings();updateHUD(false);
