@@ -670,6 +670,45 @@ for(let i=0;i<16;i++){
 
 // ===== 文明シミュレーション本体 0.6 =====
 const CELL=4;
+const GRID_CELLS=Math.round(WORLD_SIZE/CELL);
+const GRID_ORIGIN=-WORLD_SIZE/2;
+function worldToCell(v){
+ return THREE.MathUtils.clamp(Math.floor((v-GRID_ORIGIN)/CELL),0,GRID_CELLS-1);
+}
+function cellWorldCenter(type,ix,iz){
+ const size=buildingTypes[type]?.size||1;
+ return {
+  x:GRID_ORIGIN+(ix+size/2)*CELL,
+  z:GRID_ORIGIN+(iz+size/2)*CELL
+ };
+}
+function cellAnchor(type,x,z){
+ const size=buildingTypes[type]?.size||1;
+ return {
+  x:Math.floor((x-GRID_ORIGIN)/CELL-size/2+0.5),
+  z:Math.floor((z-GRID_ORIGIN)/CELL-size/2+0.5)
+ };
+}
+function footprintCellKeys(type,x,z){
+ const size=buildingTypes[type]?.size||1;
+ const a=cellAnchor(type,x,z);
+ const keys=[];
+ for(let dz=0;dz<size;dz++)for(let dx=0;dx<size;dx++){
+  keys.push((a.x+dx)+","+(a.z+dz));
+ }
+ return keys;
+}
+function footprintTerrainValid(type,x,z){
+ const size=buildingTypes[type]?.size||1;
+ const a=cellAnchor(type,x,z);
+ if(a.x<0||a.z<0||a.x+size>GRID_CELLS||a.z+size>GRID_CELLS)return false;
+ for(let dz=0;dz<size;dz++)for(let dx=0;dx<size;dx++){
+  const p=cellWorldCenter("hut",a.x+dx,a.z+dz);
+  const d=terrainData(p.x,p.z);
+  if(!d.land||["river","lake","snow","mountain"].includes(d.kind))return false;
+ }
+ return true;
+}
 const gameState={
  day:1,year:1,season:0,paused:false,elapsed:0,
  population:5,money:120,food:80,wood:35,stone:15,
@@ -809,25 +848,24 @@ function makeGhost(){
  ghost.traverse(o=>{if(o.isMesh){o.material=o.material.clone();o.material.transparent=true;o.material.opacity=0.48;}});
  scene.add(ghost);
 }
-function cellCenter(v){return Math.round(v/CELL)*CELL;}
+function cellCenter(v){return GRID_ORIGIN+(worldToCell(v)+0.5)*CELL;}
+function buildingPositionFromPoint(type,x,z){
+ const a={x:worldToCell(x),z:worldToCell(z)};
+ return cellWorldCenter(type,a.x,a.z);
+}
 function footprintFree(type,x,z){
- const size=buildingTypes[type].size||1;
- const half=CELL*size/2;
+ const occupied=new Set();
  for(const b of gameState.buildings){
-  const other=buildingTypes[b.type].size||1;
-  const oh=CELL*other/2;
-  if(Math.abs(x-b.x)<half+oh-0.05&&Math.abs(z-b.z)<half+oh-0.05)return false;
+  footprintCellKeys(b.type,b.x,b.z).forEach(k=>occupied.add(k));
  }
- return true;
+ return footprintCellKeys(type,x,z).every(k=>!occupied.has(k));
 }
 function placeBuilding(type,x,z){
  const b=buildingTypes[type];
  if(!b)return;
- if(!isLand(x,z)){showMessage("海には建設できません");return;}
- const data=terrainData(x,z);
- if(data.kind==="river"||data.kind==="lake"||data.kind==="snow"||data.kind==="mountain"){
-  showMessage("この地形には建設できません");return;
- }
+ const position=buildingPositionFromPoint(type,x,z);
+ x=position.x;z=position.z;
+ if(!footprintTerrainValid(type,x,z)){showMessage("建物の占有マスに建設できない地形が含まれています");return;}
  if(!footprintFree(type,x,z)){showMessage("建物が重なっています");return;}
  if(gameState.wood<(b.cost.wood||0)||gameState.stone<(b.cost.stone||0)||gameState.money<b.cost.money){
   showMessage("資源または資金が足りません");return;
@@ -852,6 +890,9 @@ function restoreBuildings(){
  removeAllBuildings();
  gameState.housing=8;
  for(const item of gameState.buildings){
+  const a=cellAnchor(item.type,item.x,item.z);
+  const p=cellWorldCenter(item.type,a.x,a.z);
+  item.x=p.x;item.z=p.z;
   const mesh=makeBuildingMesh(item.type,item.x,item.z);
   mesh.userData.buildingId=item.id;
   buildingGroup.add(mesh);buildingMeshes.set(item.id,mesh);
@@ -968,12 +1009,13 @@ function updateGhostAt(event){
  if(!ghost||!activeTool)return;
  const hit=setPointerRay(event);
  if(!hit){ghost.visible=false;return;}
- const x=cellCenter(hit.point.x),z=cellCenter(hit.point.z);
- const d=terrainData(x,z);
+ const p=buildingPositionFromPoint(activeTool,hit.point.x,hit.point.z);
+ const x=p.x,z=p.z;
+ const valid=footprintTerrainValid(activeTool,x,z)&&footprintFree(activeTool,x,z);
  ghost.visible=true;
  ghost.position.set(x,0,z);
  ghost.children.forEach(o=>{
-  if(o.isMesh)o.material.opacity=(isLand(x,z)&&!["river","lake","snow","mountain"].includes(d.kind)&&footprintFree(activeTool,x,z))?0.48:0.18;
+  if(o.isMesh)o.material.opacity=valid?0.48:0.18;
  });
 }
 renderer.domElement.addEventListener("pointerdown",e=>{
@@ -991,7 +1033,8 @@ renderer.domElement.addEventListener("pointerup",e=>{
  if(moved||!activeTool)return;
  const hit=setPointerRay(e);
  if(!hit)return;
- placeBuilding(activeTool,cellCenter(hit.point.x),cellCenter(hit.point.z));
+ const p=buildingPositionFromPoint(activeTool,hit.point.x,hit.point.z);
+ placeBuilding(activeTool,p.x,p.z);
 });
 renderer.domElement.addEventListener("pointercancel",()=>{pointerStart=null;pointerMoved=false;});
 document.getElementById("pauseBtn").addEventListener("click",()=>{
