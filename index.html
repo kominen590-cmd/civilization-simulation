@@ -1255,11 +1255,12 @@ function updateCellPreview(event){
  const p=selecting?{x:hit.point.x,z:hit.point.z}:buildingPositionFromPoint(type,hit.point.x,hit.point.z);
  const a=selecting?{x:worldToCell(hit.point.x),z:worldToCell(hit.point.z)}:cellAnchor(type,p.x,p.z);
  const size=selecting?1:(activeTool?(buildingTypes[type].size||1):1);
- const explored=selecting?isCellExplored(a.x,a.z):footprintCellKeys(type,p.x,p.z).every(key=>{const parts=key.split(",").map(Number);return isCellExplored(parts[0],parts[1]);});
- const terrainValid=selecting?true:footprintTerrainValid(type,p.x,p.z);
- const free=selecting?true:footprintFree(type,p.x,p.z);
- const affordable=selecting?true:(gameState.wood>=(buildingTypes[type].cost.wood||0)&&gameState.stone>=(buildingTypes[type].cost.stone||0)&&gameState.money>=buildingTypes[type].cost.money);
- const valid=selecting?true:(terrainValid&&free&&affordable);
+ const checkingPlacement=!selecting&&!!activeTool;
+ const explored=!checkingPlacement?true:footprintCellKeys(type,p.x,p.z).every(key=>{const parts=key.split(",").map(Number);return isCellExplored(parts[0],parts[1]);});
+ const terrainValid=!checkingPlacement||footprintTerrainValid(type,p.x,p.z);
+ const free=!checkingPlacement||footprintFree(type,p.x,p.z);
+ const affordable=!checkingPlacement||(gameState.wood>=(buildingTypes[type].cost.wood||0)&&gameState.stone>=(buildingTypes[type].cost.stone||0)&&gameState.money>=buildingTypes[type].cost.money);
+ const valid=!checkingPlacement||(explored&&terrainValid&&free&&affordable);
  const points=[];
  const yOffset=0.22;
  for(let dz=0;dz<size;dz++)for(let dx=0;dx<size;dx++){
