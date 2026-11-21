@@ -46,6 +46,18 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 #goalNote{font-size:9px;color:#9eaf9b;margin-top:5px;line-height:1.45}
 #firstBuildHint{font-size:10px;line-height:1.45;color:#d8e8c9;background:#304832;border:1px solid #607d58;border-radius:7px;padding:6px 8px;margin:0 0 7px}
 #savePanel{display:flex;gap:5px;margin-top:7px}
+#economyPanel{position:fixed;inset:0;z-index:25;display:none;align-items:center;justify-content:center;padding:14px;background:#07110dcc;pointer-events:auto}
+#economyPanel.active{display:flex}
+#economyCard{width:min(440px,94vw);max-height:82dvh;overflow:auto;padding:16px;border:1px solid #8da987;border-radius:14px;background:#1b3022;color:#fff;box-shadow:0 14px 42px #0009}
+#economyHeader{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+#economyHeader h2{font-size:17px;margin:0}
+#economyDate{font-size:11px;color:#c5d7bd;margin:0 0 10px}
+.economyGrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.economyCell{padding:9px;border-radius:8px;background:#29432f;border:1px solid #506b50}
+.economyCell span{display:block;font-size:10px;color:#c8d8c3}
+.economyCell b{display:block;font-size:16px;margin-top:3px}
+#economyJobs,#economyStock{margin:10px 0 0;padding:10px;border-radius:8px;background:#263d2b;font-size:11px;line-height:1.7;color:#e0eadb}
+#economyNote{font-size:10px;line-height:1.6;color:#b9cbb5;margin:10px 0 0}
 #savePanel button{flex:1}
 @media(max-width:520px){
  #panel{width:158px;padding:8px;top:7px;left:7px}
@@ -176,6 +188,7 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
  <div id="timeControls">
   <button class="uiBtn" id="modeBtn" aria-pressed="false">移動モード</button>
   <button class="uiBtn" id="pauseBtn">Ⅱ 一時停止</button>
+  <button class="uiBtn" id="economyBtn">集落情報</button>
   <button class="uiBtn" id="saveBtn">保存</button>
  </div>
 </div>
@@ -183,6 +196,23 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
  <h3><span>最初の集落</span><span id="goalProgress">0 / 4</span></h3>
  <div id="goalList"></div>
  <div id="goalNote">人口は食料・空き住居・満足度がそろうと10日ごとに増えます。目標は自由に無視できます。</div>
+</div>
+<div id="economyPanel" aria-modal="true" role="dialog" aria-labelledby="economyTitle">
+ <div id="economyCard">
+  <div id="economyHeader"><h2 id="economyTitle">集落の経済状況</h2><button class="uiBtn" id="closeEconomy">閉じる</button></div>
+  <p id="economyDate">まだ1日も進んでいません。</p>
+  <div class="economyGrid">
+   <div class="economyCell"><span>食料生産 / 日</span><b id="economyFoodProduced">0</b></div>
+   <div class="economyCell"><span>食料消費 / 日</span><b id="economyFoodConsumed">0</b></div>
+   <div class="economyCell"><span>木材生産 / 日</span><b id="economyWoodProduced">0</b></div>
+   <div class="economyCell"><span>石材生産 / 日</span><b id="economyStoneProduced">0</b></div>
+   <div class="economyCell"><span>食料の差引</span><b id="economyFoodNet">0</b></div>
+   <div class="economyCell"><span>資金の増減</span><b id="economyMoneyDelta">0 G</b></div>
+  </div>
+  <div id="economyJobs">仕事の内訳：まだ集計されていません。</div>
+  <div id="economyStock">現在の在庫：--</div>
+  <p id="economyNote">食料は5日ごと、木材・石材は3日ごとに生産されます。表示は直近の1日分です。生産量は保管上限による制限後の実際の増加量です。</p>
+ </div>
 </div>
 <div id="bottomPanel">
  <div id="buildHeader"><b>建設メニュー</b><span id="selectedTool">配置する建物を選択</span></div>
@@ -773,6 +803,7 @@ const gameState={
  population:5,money:120,food:80,wood:35,stone:15,
  housing:8,workers:4,employed:0,happiness:55,buildings:[],selected:null,
  nextId:1,foodProduced:0,woodProduced:0,stoneProduced:0,
+ lastDailyReport:null,
  research:0,era:0,lastGrowth:0
 };
 let fogMesh=null;
@@ -946,6 +977,19 @@ function localForestPotential(x,z){
  const density=forestDensity(x,z);
  return density<0.12?0:THREE.MathUtils.clamp(density*1.8,0,1.5);
 }
+function updateEconomyReport(){
+ const r=gameState.lastDailyReport;
+ const jobs=gameState.workforceByType||{};
+ document.getElementById("economyDate").textContent=r?("直近の集計："+r.year+"年 "+seasons[r.season]+" "+r.day+"日"):"まだ1日も進んでいません。";
+ document.getElementById("economyFoodProduced").textContent=r?moneyText(r.foodProduced):"—";
+ document.getElementById("economyFoodConsumed").textContent=r?moneyText(r.foodConsumed):"—";
+ document.getElementById("economyWoodProduced").textContent=r?moneyText(r.woodProduced):"—";
+ document.getElementById("economyStoneProduced").textContent=r?moneyText(r.stoneProduced):"—";
+ document.getElementById("economyFoodNet").textContent=r?((r.foodProduced-r.foodConsumed)>0?"+":"")+(r.foodProduced-r.foodConsumed):"—";
+ document.getElementById("economyMoneyDelta").textContent=r?((r.moneyDelta>0?"+":"")+r.moneyDelta.toFixed(2)+" G"):"—";
+ document.getElementById("economyJobs").textContent="仕事の内訳：農業 "+(jobs.farm||0)+"人 / 伐採 "+(jobs.woodcutter||0)+"人 / 採石 "+(jobs.quarry||0)+"人 / 水汲み "+(jobs.well||0)+"人 / 未配置 "+Math.max(0,gameState.workers-gameState.employed)+"人";
+ document.getElementById("economyStock").textContent="現在の在庫：食料 "+moneyText(gameState.food)+" / 木材 "+moneyText(gameState.wood)+" / 石材 "+moneyText(gameState.stone)+" / 資金 "+moneyText(gameState.money)+"G（保管上限 "+settlementCapacity()+"）";
+}
 function updateHUD(announceGoals=true){
  document.getElementById("dateValue").textContent=
   gameState.year+"年 "+seasons[gameState.season]+" "+gameState.day+"日";
@@ -961,6 +1005,7 @@ function updateHUD(announceGoals=true){
  document.getElementById("workDetailValue").textContent="農"+(jobs.farm||0)+" 伐"+(jobs.woodcutter||0)+" 採"+(jobs.quarry||0)+" 水"+(jobs.well||0);
  document.getElementById("happinessValue").textContent=Math.round(gameState.happiness)+"%";
  document.getElementById("storageValue").textContent=settlementCapacity();
+ updateEconomyReport();
  document.getElementById("pauseBtn").textContent=gameState.paused?"▶ 再開":"Ⅱ 一時停止";
  document.getElementById("status").textContent=
   "住民 "+gameState.population+"人 / 就業 "+gameState.employed+"人 / 建物 "+gameState.buildings.length+"棟";
@@ -1204,6 +1249,8 @@ function loadGameData(data){
  const numeric=["day","year","season","population","money","food","wood","stone","housing","workers","employed","happiness","nextId","era","elapsed","research","lastGrowth","foodProduced","woodProduced","stoneProduced"];
  numeric.forEach(k=>{if(Number.isFinite(Number(s[k])))gameState[k]=Number(s[k]);});
  gameState.workforceByType=s.workforceByType&&typeof s.workforceByType==="object"?s.workforceByType:{farm:0,woodcutter:0,quarry:0,well:0};
+ const report=s.lastDailyReport;
+ gameState.lastDailyReport=report&&typeof report==="object"&&["day","year","season","foodProduced","foodConsumed","woodProduced","stoneProduced","moneyDelta"].every(key=>Number.isFinite(Number(report[key])))?{day:Number(report.day),year:Number(report.year),season:THREE.MathUtils.clamp(Math.floor(Number(report.season)),0,3),foodProduced:Number(report.foodProduced),foodConsumed:Number(report.foodConsumed),woodProduced:Number(report.woodProduced),stoneProduced:Number(report.stoneProduced),moneyDelta:Number(report.moneyDelta)}:null;
  gameState.firstCellSelected=!!s.firstCellSelected;
  gameState.completedStartGoals=Array.isArray(s.completedStartGoals)?s.completedStartGoals.filter(id=>START_GOALS.some(g=>g.id===id)):[];
  gameState.exploredCells=Array.isArray(s.exploredCells)?s.exploredCells.filter(key=>/^\d+,\d+$/.test(key)):[];
@@ -1224,6 +1271,7 @@ function initializeNewGame(){
  gameState.population=5;gameState.money=120;gameState.food=80;gameState.wood=35;gameState.stone=15;
  gameState.housing=8;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.workforceByType={farm:0,woodcutter:0,quarry:0,well:0};gameState.buildings=[];gameState.selected=null;
  gameState.nextId=1;gameState.foodProduced=0;gameState.woodProduced=0;gameState.stoneProduced=0;
+ gameState.lastDailyReport=null;
  gameState.research=0;gameState.era=0;gameState.lastGrowth=0;
  gameState.buildings=[{id:gameState.nextId++,type:"hut",x:-58,z:-22,builtDay:1},{id:gameState.nextId++,type:"farm",x:-24,z:-32,builtDay:1}];
  restoreBuildings();
@@ -1257,6 +1305,8 @@ function loadGame(){
 }
 function advanceDay(){
  const populationBefore=gameState.population;
+ const moneyBefore=gameState.money;
+ let foodProducedToday=0,woodProducedToday=0,stoneProducedToday=0;
  gameState.day++;
  if(gameState.day>30){
   gameState.day=1;gameState.season++;
@@ -1272,7 +1322,9 @@ function advanceDay(){
  if(gameState.day%5===0){
   const potential=farms.reduce((sum,b)=>sum+6*localFarmPotential(b.x,b.z),0);
   const produced=Math.floor(potential*labor.farm);
+  const before=gameState.food;
   gameState.food=Math.min(capacity,gameState.food+produced);
+  foodProducedToday=gameState.food-before;
   gameState.foodProduced+=produced;
  }
  if(gameState.day%3===0){
@@ -1280,8 +1332,10 @@ function advanceDay(){
   const produced=Math.floor(woodPotential*labor.wood);
   const stonePotential=quarries.reduce((sum,b)=>sum+(terrainData(b.x,b.z).kind==="hill"?1.6:0.65),0);
   const stone=Math.floor(stonePotential*labor.stone);
+  const woodBefore=gameState.wood,stoneBefore=gameState.stone;
   gameState.wood=Math.min(capacity,gameState.wood+produced);
   gameState.stone=Math.min(capacity,gameState.stone+stone);
+  woodProducedToday=gameState.wood-woodBefore;stoneProducedToday=gameState.stone-stoneBefore;
   gameState.woodProduced+=produced;gameState.stoneProduced+=stone;
  }
  const consumption=Math.max(1,Math.ceil(gameState.population*0.12));
@@ -1298,6 +1352,7 @@ function advanceDay(){
  if(gameState.food>gameState.population*5&&gameState.population<gameState.housing&&gameState.happiness>=50&&gameState.day%10===0){
   gameState.population++;
  }
+ gameState.lastDailyReport={day:gameState.day,year:gameState.year,season:gameState.season,foodProduced:foodProducedToday,foodConsumed:consumption,woodProduced:woodProducedToday,stoneProduced:stoneProducedToday,moneyDelta:gameState.money-moneyBefore};
  allocateLabor();
  if(gameState.population!==populationBefore)syncResidentVisuals();
  if(gameState.population>=20&&gameState.era<1)gameState.era=1;
@@ -1458,6 +1513,13 @@ renderer.domElement.addEventListener("pointerup",e=>{
  if(e.pointerType!=="mouse")clearCellPreview();
 });
 renderer.domElement.addEventListener("pointercancel",()=>{pointerStart=null;pointerMoved=false;});
+document.getElementById("economyBtn").addEventListener("click",()=>{
+ updateEconomyReport();document.getElementById("economyPanel").classList.add("active");
+});
+document.getElementById("closeEconomy").addEventListener("click",()=>document.getElementById("economyPanel").classList.remove("active"));
+document.getElementById("economyPanel").addEventListener("click",event=>{
+ if(event.target.id==="economyPanel")event.currentTarget.classList.remove("active");
+});
 document.getElementById("pauseBtn").addEventListener("click",()=>{
  gameState.paused=!gameState.paused;updateHUD();showMessage(gameState.paused?"時間を停止しました":"時間を再開しました");
 });
