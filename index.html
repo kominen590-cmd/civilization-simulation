@@ -1005,26 +1005,63 @@ function setPointerRay(event){
  raycaster.setFromCamera(pointerNdc,camera);
  return raycaster.intersectObject(terrain,false)[0]||null;
 }
-function updateGhostAt(event){
- if(!ghost||!activeTool)return;
- const hit=setPointerRay(event);
- if(!hit){ghost.visible=false;return;}
- const p=buildingPositionFromPoint(activeTool,hit.point.x,hit.point.z);
- const x=p.x,z=p.z;
- const valid=footprintTerrainValid(activeTool,x,z)&&footprintFree(activeTool,x,z);
- ghost.visible=true;
- ghost.position.set(x,0,z);
- ghost.children.forEach(o=>{
-  if(o.isMesh)o.material.opacity=valid?0.48:0.18;
- });
+let cellPreview=null;
+function clearCellPreview(){
+ if(cellPreview){scene.remove(cellPreview);cellPreview.geometry.dispose();cellPreview.material.dispose();cellPreview=null;}
 }
+function updateCellPreview(event){
+ const hit=setPointerRay(event);
+ if(!hit){clearCellPreview();if(ghost)ghost.visible=false;return;}
+ const type=activeTool||"hut";
+ const p=buildingPositionFromPoint(type,hit.point.x,hit.point.z);
+ const a=cellAnchor(type,p.x,p.z);
+ const size=activeTool?(buildingTypes[type].size||1):1;
+ const valid=activeTool?footprintTerrainValid(type,p.x,p.z)&&footprintFree(type,p.x,p.z):true;
+ const points=[];
+ const yOffset=0.22;
+ for(let dz=0;dz<size;dz++)for(let dx=0;dx<size;dx++){
+  const ix=a.x+dx,iz=a.z+dz;
+  const x0=GRID_ORIGIN+ix*CELL,z0=GRID_ORIGIN+iz*CELL;
+  const x1=x0+CELL,z1=z0+CELL;
+  const corners=[[x0,z0],[x1,z0],[x1,z1],[x0,z1]];
+  for(let i=0;i<4;i++){
+   const c1=corners[i],c2=corners[(i+1)%4];
+   const h1=terrainData(c1[0],c1[1]).height+yOffset;
+   const h2=terrainData(c2[0],c2[1]).height+yOffset;
+   points.push(c1[0],h1,c1[1],c2[0],h2,c2[1]);
+  }
+ }
+ clearCellPreview();
+ const geometry=new THREE.BufferGeometry();
+ geometry.setAttribute("position",new THREE.Float32BufferAttribute(points,3));
+ const material=new THREE.LineBasicMaterial({
+  color:activeTool?(valid?0x55ff88:0xff5555):0xffffff,
+  transparent:true,opacity:activeTool?0.98:0.78,
+  depthTest:false
+ });
+ cellPreview=new THREE.LineSegments(geometry,material);
+ cellPreview.renderOrder=20;
+ scene.add(cellPreview);
+ if(ghost){
+  ghost.visible=!!activeTool;
+  if(activeTool){
+   ghost.position.set(p.x,0,p.z);
+   ghost.traverse(o=>{if(o.isMesh)o.material.opacity=valid?0.48:0.18;});
+  }
+ }
+}
+function updateGhostAt(event){updateCellPreview(event);}
 renderer.domElement.addEventListener("pointerdown",e=>{
  if(e.pointerType==="mouse"&&e.button!==0)return;
  pointerStart={x:e.clientX,y:e.clientY};pointerMoved=false;
 });
 renderer.domElement.addEventListener("pointermove",e=>{
  if(pointerStart&&Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>7)pointerMoved=true;
- if(!pointerMoved)updateGhostAt(e);
+ if(!pointerMoved||e.pointerType==="mouse")updateGhostAt(e);
+});
+renderer.domElement.addEventListener("pointerleave",()=>{
+ clearCellPreview();
+ if(ghost)ghost.visible=false;
 });
 renderer.domElement.addEventListener("pointerup",e=>{
  if(!pointerStart)return;
@@ -1042,7 +1079,7 @@ document.getElementById("pauseBtn").addEventListener("click",()=>{
 });
 document.getElementById("saveBtn").addEventListener("click",()=>saveGame(true));
 document.getElementById("cancelBuild").addEventListener("click",()=>{
- activeTool=null;if(ghost){scene.remove(ghost);ghost=null;}
+ activeTool=null;clearCellPreview();if(ghost){scene.remove(ghost);ghost=null;}
  document.querySelectorAll(".buildBtn").forEach(x=>x.classList.remove("active"));
  document.getElementById("selectedTool").textContent="配置する建物を選択";
  document.getElementById("inspect").textContent="建設選択を解除しました。";
