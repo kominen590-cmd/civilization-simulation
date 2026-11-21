@@ -1247,7 +1247,7 @@ function findResidentPath(start,target){
  const dirs=[[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
  while(head<tail&& !visited[goalId]){
   const id=queue[head++],ix=id%GRID_CELLS,iz=Math.floor(id/GRID_CELLS);
-  const here=terrainData(...Object.values(cellWorldCenter("hut",ix,iz)));
+  const herePoint=cellWorldCenter("hut",ix,iz),here=terrainData(herePoint.x,herePoint.z);
   for(const [dx,dz] of dirs){
    const nx=ix+dx,nz=iz+dz,nid=nz*GRID_CELLS+nx;
    if(nx<0||nz<0||nx>=GRID_CELLS||nz>=GRID_CELLS||visited[nid]||!walkable(nx,nz,nid))continue;
@@ -1260,7 +1260,7 @@ function findResidentPath(start,target){
  if(!visited[goalId])return null;
  const ids=[];for(let id=goalId;id!==startId;id=parent[id])ids.push(id);
  ids.reverse();
- return ids.slice(0,-1).map(id=>cellWorldCenter("hut",id%GRID_CELLS,Math.floor(id/GRID_CELLS)));
+ return ids.slice(1,-1).map(id=>cellWorldCenter("hut",id%GRID_CELLS,Math.floor(id/GRID_CELLS)));
 }
 function setResidentDestination(person,atWork){
  const data=person.userData,target=atWork?data.workPoint:data.homePoint;
