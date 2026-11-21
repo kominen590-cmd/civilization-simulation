@@ -14,18 +14,78 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 #panel p{margin:3px 0;font-size:12px;color:#d4e2d3}
 #help{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:#17251cdd;padding:9px 13px;border-radius:10px;font-size:12px;white-space:nowrap;pointer-events:none}
 #status{position:absolute;right:12px;top:12px;background:#17251ce8;padding:9px 12px;border-radius:10px;font-size:11px;color:#d4e2d3}
+
+#game{position:fixed;inset:0}
+#panel{z-index:5;top:10px;left:10px;min-width:0;width:min(245px,48vw);padding:10px 12px;pointer-events:none}
+#panel h2{font-size:14px}
+#panel p{font-size:11px}
+#status{z-index:5;max-width:45vw}
+#help{z-index:4;bottom:8px;font-size:10px;white-space:normal;text-align:center;max-width:90vw}
+#hud{position:fixed;z-index:8;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-end;pointer-events:none}
+#stats{display:grid;grid-template-columns:repeat(2,minmax(82px,1fr));gap:4px;background:#17251ced;padding:8px;border-radius:10px;min-width:178px}
+.stat{font-size:10px;color:#cbd9cb}.stat b{display:block;color:white;font-size:13px;margin-top:2px}
+#timeControls{display:flex;gap:5px;pointer-events:auto}
+.uiBtn,.buildBtn{border:1px solid #718b70;background:#263d2b;color:#fff;border-radius:8px;padding:8px 10px;font-size:12px;min-height:36px}
+.uiBtn:active,.buildBtn:active,.buildBtn.active{background:#54784b}
+#bottomPanel{position:fixed;z-index:9;left:8px;right:8px;bottom:8px;background:#17251cf2;border:1px solid #61755d;border-radius:13px;padding:8px;max-height:34vh;overflow:auto;pointer-events:auto}
+#buildHeader{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:7px;font-size:12px}
+#buildButtons{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.buildBtn{padding:7px 3px;font-size:10px;min-height:48px}
+.buildBtn small{display:block;color:#c8d9c3;font-size:9px;margin-top:3px}
+#message{position:fixed;z-index:12;left:50%;top:50%;transform:translate(-50%,-50%);background:#17251cf2;border:1px solid #9bb58d;border-radius:10px;padding:10px 14px;font-size:12px;max-width:85vw;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none}
+#message.show{opacity:1}
+#inspect{font-size:11px;color:#d7e5d4;margin-top:6px;min-height:15px}
+#savePanel{display:flex;gap:5px;margin-top:7px}
+#savePanel button{flex:1}
+@media(max-width:520px){
+ #panel{width:158px;padding:8px;top:7px;left:7px}
+ #panel h2{font-size:12px}
+ #panel p{font-size:9px}
+ #stats{min-width:142px;padding:6px;gap:3px}
+ .stat{font-size:9px}.stat b{font-size:11px}
+ #bottomPanel{max-height:31vh}
+}
+
 </style>
 </head>
 <body>
 <div id="game"></div>
+
+<div id="hud">
+ <div id="stats">
+  <div class="stat">日付<b id="dateValue">1年 春 1日</b></div>
+  <div class="stat">時代<b id="eraValue">原始時代</b></div>
+  <div class="stat">人口<b id="populationValue">5人</b></div>
+  <div class="stat">資金<b id="moneyValue">120</b></div>
+  <div class="stat">食料<b id="foodValue">80</b></div>
+  <div class="stat">木材 / 石材<b id="materialsValue">35 / 15</b></div>
+ </div>
+ <div id="timeControls">
+  <button class="uiBtn" id="pauseBtn">Ⅱ 一時停止</button>
+  <button class="uiBtn" id="saveBtn">保存</button>
+ </div>
+</div>
+<div id="bottomPanel">
+ <div id="buildHeader"><b>建設メニュー</b><span id="selectedTool">配置する建物を選択</span></div>
+ <div id="buildButtons"></div>
+ <div id="inspect">地面をタップすると建設位置を選べます。建物を選んでから地面をタップしてください。</div>
+ <div id="savePanel">
+  <button class="uiBtn" id="cancelBuild">選択解除</button>
+  <button class="uiBtn" id="exportSave">バックアップ出力</button>
+  <button class="uiBtn" id="importSave">読込</button>
+  <input id="importFile" type="file" accept="application/json" hidden>
+ </div>
+</div>
+<div id="message"></div>
+
 <div id="panel">
 <h2>文明発展シミュレーション</h2>
 <p>未開拓の大陸</p>
-<p>地形生成システム 0.3</p>
+<p>地形生成・文明シミュレーション 0.6.1</p>
 <p id="worldInfo">世界を生成中...</p>
 </div>
-<div id="status">自然地形ワールド</div>
-<div id="help">ドラッグ：視点回転　ピンチ：拡大・縮小　2本指ドラッグ：移動</div>
+<div id="status">文明シミュレーション 0.6.1</div>
+<div id="help">1本指ドラッグ：視点操作　ピンチ：拡大・縮小　建物を選んで地面をタップ：建設</div>
 
 <script type="importmap">
 {
@@ -44,7 +104,14 @@ const container=document.getElementById("game");
 const WORLD_SIZE=220;
 const HALF=WORLD_SIZE/2;
 const GRID=180;
-const SEED=Math.floor(Math.random()*1000000000);
+const SEED=(()=>{
+ const key="civilizationWorldSeedV6";
+ const existing=localStorage.getItem(key);
+ if(existing&&Number.isFinite(Number(existing)))return Number(existing);
+ const created=Math.floor(Math.random()*1000000000);
+ localStorage.setItem(key,String(created));
+ return created;
+})();
 
 function randomGenerator(seed){
  let s=seed>>>0;
@@ -62,7 +129,7 @@ scene.background=new THREE.Color(0x9bbbc7);
 scene.fog=new THREE.Fog(0x9bbbc7,120,340);
 
 const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,700);
-camera.position.set(65,75,85);
+camera.position.set(17,75,67);
 
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:"high-performance"});
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
@@ -73,10 +140,14 @@ container.appendChild(renderer.domElement);
 const controls=new OrbitControls(camera,renderer.domElement);
 controls.enableDamping=true;
 controls.dampingFactor=0.065;
+// iPad向け：1本指で地形をつかんで移動、2本指でピンチ＋回転
+controls.touches.ONE=THREE.TOUCH.PAN;
+controls.touches.TWO=THREE.TOUCH.DOLLY_ROTATE;
+controls.screenSpacePanning=true;
 controls.maxPolarAngle=Math.PI/2.04;
 controls.minDistance=12;
 controls.maxDistance=230;
-controls.target.set(0,0,0);
+controls.target.set(-48,0,-18);
 
 scene.add(new THREE.HemisphereLight(0xffffff,0x617052,2));
 const sun=new THREE.DirectionalLight(0xfff2d9,2.1);
@@ -108,6 +179,18 @@ function fbm(x,z){
 function ridgeNoise(x,z){
  const n=fbm(x+700,z-900);
  return 1-Math.abs(n*2-1);
+}
+
+// 地域ごとの気温・湿度。緯度と標高、地形ノイズから自然に変化する。
+function temperatureAt(x,z,height=0){
+ const latitude=Math.abs(z)/HALF;
+ const local=noise(x+1500,z-1200,90);
+ return THREE.MathUtils.clamp(1-latitude*0.72-height*0.012+(local-0.5)*0.16,0,1);
+}
+function moistureAt(x,z){
+ return THREE.MathUtils.clamp(
+  fbm(x-1100,z+1300)*0.72+noise(x+700,z-500,24)*0.28,0,1
+ );
 }
 
 // 大陸・島
@@ -166,7 +249,9 @@ function baseHeight(x,z){
  let height=0.5+coast*(2+broad*3.2+detail*1.1);
 
  // 山脈のように連続する高地
- const ridge=ridgeNoise(x+800,z-400);
+ const warpX=(noise(x+1700,z-800,38)-0.5)*18;
+ const warpZ=(noise(x-1300,z+900,38)-0.5)*18;
+ const ridge=ridgeNoise(x+800+warpX,z-400+warpZ);
  const mountainRegion=noise(x+930,z+270,75);
  const mountainStrength=THREE.MathUtils.clamp(
   (ridge-0.57)*1.9,0,1
@@ -217,14 +302,25 @@ for(const path of riverPaths){
  riverCurves.push(new THREE.CatmullRomCurve3(points));
 }
 
+// 川の距離は線分への最近点で計算する（地形生成時の負荷を軽減）
+const riverSegments=[];
+for(const path of riverPaths){
+ for(let i=0;i<path.length-1;i++){
+  const a=path[i],b=path[i+1];
+  const dx=b[0]-a[0],dz=b[1]-a[1];
+  riverSegments.push({x:a[0],z:a[1],dx,dz,len2:dx*dx+dz*dz});
+ }
+}
 function riverDistance(x,z){
  let best=999;
- for(const curve of riverCurves){
-  for(let i=0;i<=36;i++){
-   const p=curve.getPoint(i/36);
-   const d=Math.hypot(x-p.x,z-p.z);
-   best=Math.min(best,d);
-  }
+ for(const s of riverSegments){
+  const t=THREE.MathUtils.clamp(
+   ((x-s.x)*s.dx+(z-s.z)*s.dz)/s.len2,0,1
+  );
+  const dx=x-(s.x+s.dx*t);
+  const dz=z-(s.z+s.dz*t);
+  const d2=dx*dx+dz*dz;
+  if(d2<best*best)best=Math.sqrt(d2);
  }
  return best;
 }
@@ -239,18 +335,20 @@ function terrainData(x,z){
  const riverCut=Math.exp(-Math.pow(river/2.5,2));
  height-=riverCut*1.8;
 
- const broad=fbm(x+500,z+500);
+ const moisture=moistureAt(x,z);
+ const temperature=temperatureAt(x,z,height);
  let kind="plain";
 
  if(lakeDistance(x,z)<1)kind="lake";
  else if(river<1.8)kind="river";
  else if(score<0.18)kind="beach";
+ else if(height>18||(temperature<0.16&&height>5))kind="snow";
  else if(height>13)kind="mountain";
  else if(height>6)kind="hill";
- else if(broad<0.27)kind="wetland";
- else if(broad>0.76)kind="dry";
+ else if(moisture<0.25)kind="dry";
+ else if(moisture>0.76)kind="wetland";
 
- return {land:true,height,kind};
+ return {land:true,height,kind,moisture,temperature};
 }
 
 // 地形メッシュ
@@ -265,20 +363,23 @@ const palette={
  plain:0x789c58,
  hill:0x71845b,
  mountain:0x85877b,
+ snow:0xd9e2df,
  wetland:0x617f60,
  dry:0xa69b69,
  river:0x397f9e,
  lake:0x397f9e
 };
+const terrainCounts={sea:0,plain:0,hill:0,mountain:0,snow:0,wetland:0,dry:0,beach:0};
 
 for(let i=0;i<positions.count;i++){
  const x=positions.getX(i);
  const z=positions.getZ(i);
  const data=terrainData(x,z);
  positions.setY(i,data.height);
+ if(terrainCounts[data.kind]!==undefined)terrainCounts[data.kind]++;
 
  const color=new THREE.Color(palette[data.kind]||palette.plain);
- const variation=0.92+noise(x+123,z-321,5)*0.16;
+ const variation=0.90+noise(x+123,z-321,5)*0.18;
  color.multiplyScalar(variation);
  colors.push(color.r,color.g,color.b);
 }
@@ -307,7 +408,7 @@ scene.add(ocean);
 
 // 湖の水面：地形のくぼみに合わせる
 const lakeMaterial=new THREE.MeshStandardMaterial({
- color:0x438eae,roughness:0.3
+ color:0x438eae,roughness:0.28,metalness:0.04
 });
 for(const lake of lakes){
  if(!isLand(lake.x,lake.z))continue;
@@ -318,7 +419,7 @@ for(const lake of lakes){
  mesh.rotation.x=-Math.PI/2;
  mesh.position.set(
   lake.x,
-  baseHeight(lake.x,lake.z)-0.05,
+  baseHeight(lake.x,lake.z)+1.25,
   lake.z
  );
  mesh.scale.set(lake.rx*0.82,lake.rz*0.82,1);
@@ -358,7 +459,7 @@ for(const curve of riverCurves){
 const trunkGeometry=new THREE.CylinderGeometry(0.13,0.19,1.2,5);
 const leafGeometry=new THREE.ConeGeometry(0.85,2.5,6);
 const trunkMaterial=new THREE.MeshStandardMaterial({color:0x705039});
-const leafMaterial=new THREE.MeshStandardMaterial({color:0x315b35});
+const leafMaterial=new THREE.MeshStandardMaterial({color:0xffffff});
 
 const MAX_TREES=2200;
 const treeTrunks=new THREE.InstancedMesh(trunkGeometry,trunkMaterial,MAX_TREES);
@@ -388,14 +489,15 @@ for(let i=0;i<MAX_TREES;i++){
  const data=terrainData(x,z);
 
  if(!data.land)continue;
- if(["beach","river","lake","mountain"].includes(data.kind))continue;
+ if(["beach","river","lake","mountain","snow"].includes(data.kind))continue;
 
  const density=forestDensity(x,z);
  const broad=fbm(x+900,z+700);
-
+ const moisture=data.moisture;
+ if(data.temperature<0.12||moisture<0.18)continue;
  if(density<0.15&&random()>0.12)continue;
  if(broad<0.30)continue;
- if(random()>0.55+density*0.35)continue;
+ if(random()>0.42+density*0.43)continue;
 
  const scale=0.7+random()*0.65;
  const y=data.height;
@@ -409,6 +511,12 @@ for(let i=0;i<MAX_TREES;i++){
  dummy.position.set(x,y+2*scale,z);
  dummy.updateMatrix();
  treeLeaves.setMatrixAt(treeCount,dummy.matrix);
+ const leafColor=new THREE.Color();
+ if(moisture>0.72)leafColor.setHex(0x244d3c);
+ else if(data.temperature<0.28)leafColor.setHex(0x426044);
+ else if(moisture<0.32)leafColor.setHex(0x6c7540);
+ else leafColor.setHex(0x315b35);
+ treeLeaves.setColorAt(treeCount,leafColor);
 
  treeCount++;
 }
@@ -417,13 +525,38 @@ treeTrunks.count=treeCount;
 treeLeaves.count=treeCount;
 treeTrunks.instanceMatrix.needsUpdate=true;
 treeLeaves.instanceMatrix.needsUpdate=true;
+if(treeLeaves.instanceColor)treeLeaves.instanceColor.needsUpdate=true;
 scene.add(treeTrunks,treeLeaves);
+
+// 岩場：高地や山のふもとに小さな岩を配置する。
+const MAX_ROCKS=520;
+const rockGeometry=new THREE.DodecahedronGeometry(1,0);
+const rockMaterial=new THREE.MeshStandardMaterial({color:0x77776e,roughness:1});
+const rocks=new THREE.InstancedMesh(rockGeometry,rockMaterial,MAX_ROCKS);
+let rockCount=0;
+for(let i=0;i<MAX_ROCKS*3&&rockCount<MAX_ROCKS;i++){
+ const x=(random()-0.5)*WORLD_SIZE;
+ const z=(random()-0.5)*WORLD_SIZE;
+ const data=terrainData(x,z);
+ if(!data.land||data.height<5||["beach","river","lake","snow"].includes(data.kind))continue;
+ if(random()>0.42)continue;
+ const size=0.35+random()*1.15;
+ dummy.position.set(x,data.height+size*0.32,z);
+ dummy.scale.set(size,size*(0.55+random()*0.55),size*(0.7+random()*0.5));
+ dummy.rotation.set(random()*0.4,random()*Math.PI*2,random()*0.4);
+ dummy.updateMatrix();
+ rocks.setMatrixAt(rockCount++,dummy.matrix);
+}
+rocks.count=rockCount;
+rocks.instanceMatrix.needsUpdate=true;
+scene.add(rocks);
 
 // 雲：複数の球を組み合わせる
 const cloudMaterial=new THREE.MeshStandardMaterial({
  color:0xffffff,transparent:true,opacity:0.66,roughness:1
 });
 
+const clouds=[];
 for(let i=0;i<16;i++){
  const group=new THREE.Group();
  const count=3+Math.floor(random()*4);
@@ -450,16 +583,332 @@ for(let i=0;i<16;i++){
   38+random()*18,
   (random()-0.5)*270
  );
+ group.userData.drift=0.35+random()*0.35;
+ clouds.push(group);
  scene.add(group);
 }
 
+
+// ===== 文明シミュレーション本体 0.6 =====
+const CELL=4;
+const gameState={
+ day:1,year:1,season:0,paused:false,elapsed:0,
+ population:5,money:120,food:80,wood:35,stone:15,
+ housing:8,workers:5,buildings:[],selected:null,
+ nextId:1,foodProduced:0,woodProduced:0,stoneProduced:0,
+ research:0,era:0,lastGrowth:0
+};
+const seasons=["春","夏","秋","冬"];
+const eras=["原始時代","農耕時代","金属時代","中世時代","産業時代","近代","先進時代"];
+const buildingTypes={
+ hut:{name:"住居",cost:{wood:12,stone:0,money:8},size:1,capacity:5,color:0xb88b5c,desc:"人口の住まい。定員+5。"},
+ farm:{name:"農地",cost:{wood:5,stone:0,money:5},size:2,food:3,color:0x9b9a48,desc:"5日ごとに食料を生産。"},
+ woodcutter:{name:"伐採所",cost:{wood:8,stone:0,money:8},size:1,wood:2,color:0x795438,desc:"森林が近いと木材を生産。"},
+ quarry:{name:"採石場",cost:{wood:8,stone:3,money:12},size:2,stone:1,color:0x85877e,desc:"石材を少しずつ採掘。"},
+ store:{name:"倉庫",cost:{wood:15,stone:3,money:15},size:2,storage:100,color:0x9b754c,desc:"資源の保管上限を拡張。"},
+ well:{name:"井戸",cost:{wood:7,stone:2,money:10},size:1,water:1,color:0x477f9a,desc:"集落の生活環境を改善。"},
+ plaza:{name:"広場",cost:{wood:10,stone:5,money:15},size:2,happiness:1,color:0x9d9b80,desc:"住民の満足度を改善。"}
+};
+const buildingMeshes=new Map();
+const buildingGroup=new THREE.Group();
+scene.add(buildingGroup);
+let activeTool=null;
+let pointerStart=null;
+let pointerMoved=false;
+let lastSimTime=performance.now();
+let saveTimer=0;
+let messageTimer=null;
+let ghost=null;
+const raycaster=new THREE.Raycaster();
+const pointerNdc=new THREE.Vector2();
+const groundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+const tempPoint=new THREE.Vector3();
+
+function showMessage(text){
+ const el=document.getElementById("message");
+ el.textContent=text;el.classList.add("show");
+ clearTimeout(messageTimer);
+ messageTimer=setTimeout(()=>el.classList.remove("show"),1800);
+}
+function moneyText(n){return Math.floor(n).toLocaleString("ja-JP");}
+function updateHUD(){
+ document.getElementById("dateValue").textContent=
+  gameState.year+"年 "+seasons[gameState.season]+" "+gameState.day+"日";
+ document.getElementById("eraValue").textContent=eras[gameState.era];
+ document.getElementById("populationValue").textContent=gameState.population+"人";
+ document.getElementById("moneyValue").textContent=moneyText(gameState.money);
+ document.getElementById("foodValue").textContent=moneyText(gameState.food);
+ document.getElementById("materialsValue").textContent=
+  moneyText(gameState.wood)+" / "+moneyText(gameState.stone);
+ document.getElementById("pauseBtn").textContent=gameState.paused?"▶ 再開":"Ⅱ 一時停止";
+ document.getElementById("status").textContent=
+  "建物 "+gameState.buildings.length+"棟 / 労働力 "+gameState.workers+"人";
+}
+function buildMenu(){
+ const root=document.getElementById("buildButtons");
+ root.innerHTML="";
+ Object.entries(buildingTypes).forEach(([id,b])=>{
+  const button=document.createElement("button");
+  button.className="buildBtn";
+  button.dataset.type=id;
+  button.innerHTML=b.name+"<small>木 "+(b.cost.wood||0)+" / 石 "+(b.cost.stone||0)+" / "+b.cost.money+"G</small>";
+  button.addEventListener("click",()=>{
+   activeTool=id;
+   document.querySelectorAll(".buildBtn").forEach(x=>x.classList.toggle("active",x===button));
+   document.getElementById("selectedTool").textContent=b.name+"を配置";
+   document.getElementById("inspect").textContent=b.desc+" 地面をタップして配置。";
+   makeGhost();
+  });
+  root.appendChild(button);
+ });
+}
+function makeBuildingMesh(type,x,z){
+ const b=buildingTypes[type];
+ const group=new THREE.Group();
+ const size=b.size||1;
+ const baseY=terrainData(x,z).height;
+ const footprint=CELL*size*0.88;
+ const base=new THREE.Mesh(
+  new THREE.BoxGeometry(footprint,0.45,footprint),
+  new THREE.MeshStandardMaterial({color:0x615a49,roughness:1})
+ );
+ base.position.y=baseY+0.22;group.add(base);
+ const height=type==="hut"?2.5:type==="store"?2.1:type==="farm"?0.35:type==="well"?0.8:type==="plaza"?0.18:1.5;
+ const body=new THREE.Mesh(
+  new THREE.BoxGeometry(footprint*0.82,height,footprint*0.82),
+  new THREE.MeshStandardMaterial({color:b.color,roughness:0.92})
+ );
+ body.position.y=baseY+0.45+height/2;group.add(body);
+ if(type==="hut"||type==="store"){
+  const roof=new THREE.Mesh(new THREE.ConeGeometry(footprint*0.67,1.25,4),
+   new THREE.MeshStandardMaterial({color:type==="hut"?0x70452f:0x625044}));
+  roof.position.set(0,baseY+0.45+height+0.55,0);
+  roof.rotation.y=Math.PI/4;group.add(roof);
+ }
+ if(type==="farm"){
+  for(let i=0;i<4;i++){
+   const row=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.72,0.12,0.18),
+    new THREE.MeshStandardMaterial({color:0x526c36}));
+   row.position.set(0,baseY+0.56,(i-1.5)*0.55);group.add(row);
+  }
+ }
+ group.position.set(x,0,z);
+ group.userData={baseY};
+ return group;
+}
+function makeGhost(){
+ if(ghost){scene.remove(ghost);ghost=null;}
+ if(!activeTool)return;
+ ghost=makeBuildingMesh(activeTool,0,0);
+ ghost.traverse(o=>{if(o.isMesh){o.material=o.material.clone();o.material.transparent=true;o.material.opacity=0.48;}});
+ scene.add(ghost);
+}
+function cellCenter(v){return Math.round(v/CELL)*CELL;}
+function footprintFree(type,x,z){
+ const size=buildingTypes[type].size||1;
+ const half=CELL*size/2;
+ for(const b of gameState.buildings){
+  const other=buildingTypes[b.type].size||1;
+  const oh=CELL*other/2;
+  if(Math.abs(x-b.x)<half+oh-0.05&&Math.abs(z-b.z)<half+oh-0.05)return false;
+ }
+ return true;
+}
+function placeBuilding(type,x,z){
+ const b=buildingTypes[type];
+ if(!b)return;
+ if(!isLand(x,z)){showMessage("海には建設できません");return;}
+ const data=terrainData(x,z);
+ if(data.kind==="river"||data.kind==="lake"||data.kind==="snow"||data.kind==="mountain"){
+  showMessage("この地形には建設できません");return;
+ }
+ if(!footprintFree(type,x,z)){showMessage("建物が重なっています");return;}
+ if(gameState.wood<(b.cost.wood||0)||gameState.stone<(b.cost.stone||0)||gameState.money<b.cost.money){
+  showMessage("資源または資金が足りません");return;
+ }
+ gameState.wood-=b.cost.wood||0;
+ gameState.stone-=b.cost.stone||0;
+ gameState.money-=b.cost.money;
+ const item={id:gameState.nextId++,type,x,z,builtDay:gameState.day};
+ gameState.buildings.push(item);
+ const mesh=makeBuildingMesh(type,x,z);
+ mesh.userData.buildingId=item.id;
+ buildingGroup.add(mesh);buildingMeshes.set(item.id,mesh);
+ if(b.capacity)gameState.housing+=b.capacity;
+ document.getElementById("inspect").textContent=b.name+"を建設した。";
+ updateHUD();saveGame(false);
+}
+function removeAllBuildings(){
+ buildingGroup.clear();buildingMeshes.clear();
+}
+function restoreBuildings(){
+ removeAllBuildings();
+ gameState.housing=8;
+ for(const item of gameState.buildings){
+  const mesh=makeBuildingMesh(item.type,item.x,item.z);
+  mesh.userData.buildingId=item.id;
+  buildingGroup.add(mesh);buildingMeshes.set(item.id,mesh);
+  if(buildingTypes[item.type].capacity)gameState.housing+=buildingTypes[item.type].capacity;
+ }
+}
+function saveGame(notify=true){
+ const data={version:6,seed:SEED,state:gameState,camera:{
+  position:camera.position.toArray(),target:controls.target.toArray()
+ }};
+ try{
+  localStorage.setItem("civilizationSimulationSaveV6",JSON.stringify(data));
+  if(notify)showMessage("ゲームを保存しました");
+ }catch(e){showMessage("保存できませんでした。空き容量を確認してください");}
+}
+function loadGameData(data){
+ if(!data||data.version!==6||!data.state)throw new Error("保存データの形式が違います");
+ const s=data.state;
+ const numeric=["day","year","season","population","money","food","wood","stone","housing","workers","nextId","era","elapsed","research","lastGrowth","foodProduced","woodProduced","stoneProduced"];
+ numeric.forEach(k=>{if(Number.isFinite(Number(s[k])))gameState[k]=Number(s[k]);});
+ gameState.buildings=Array.isArray(s.buildings)?s.buildings.filter(b=>buildingTypes[b.type]&&Number.isFinite(b.x)&&Number.isFinite(b.z)): [];
+ gameState.paused=!!s.paused;
+ restoreBuildings();updateHUD();
+ if(data.camera){
+  if(Array.isArray(data.camera.position))camera.position.fromArray(data.camera.position);
+  if(Array.isArray(data.camera.target))controls.target.fromArray(data.camera.target);
+ }
+}
+function loadGame(){
+ try{
+  const raw=localStorage.getItem("civilizationSimulationSaveV6");
+  if(raw){loadGameData(JSON.parse(raw));showMessage("前回のセーブを読み込みました");}
+  else{
+   // 新しい文明の初期集落。住居と小さな農地から開始する。
+   gameState.buildings=[
+    {id:gameState.nextId++,type:"hut",x:-58,z:-22,builtDay:1},
+    {id:gameState.nextId++,type:"farm",x:-24,z:-32,builtDay:1}
+   ];
+   restoreBuildings();
+   updateHUD();
+   saveGame(false);
+  }
+ }catch(e){showMessage("セーブデータを読み込めませんでした");}
+}
+function advanceDay(){
+ gameState.day++;
+ if(gameState.day>30){
+  gameState.day=1;gameState.season++;
+  if(gameState.season>3){gameState.season=0;gameState.year++;}
+ }
+ const farms=gameState.buildings.filter(b=>b.type==="farm").length;
+ const cutters=gameState.buildings.filter(b=>b.type==="woodcutter").length;
+ const quarries=gameState.buildings.filter(b=>b.type==="quarry").length;
+ const wells=gameState.buildings.filter(b=>b.type==="well").length;
+ const plazas=gameState.buildings.filter(b=>b.type==="plaza").length;
+ if(gameState.day%5===0){
+  const produced=farms*3;
+  gameState.food+=produced;gameState.foodProduced+=produced;
+ }
+ if(gameState.day%3===0){
+  const produced=cutters*(forestCenters.length?2:1);
+  gameState.wood+=produced;gameState.woodProduced+=produced;
+  const stone=quarries;
+  gameState.stone+=stone;gameState.stoneProduced+=stone;
+ }
+ const consumption=Math.max(1,Math.ceil(gameState.population*0.16));
+ gameState.food=Math.max(0,gameState.food-consumption);
+ gameState.money-=Math.max(0,gameState.buildings.length*0.08);
+ gameState.money+=Math.floor(gameState.population*0.025);
+ if(gameState.food===0&&gameState.population>5){
+  gameState.population=Math.max(5,gameState.population-1);
+ }
+ if(gameState.food>gameState.population*4&&gameState.population<gameState.housing&&gameState.day%10===0){
+  gameState.population++;
+ }
+ gameState.workers=Math.max(0,gameState.population-Math.ceil(gameState.population*0.2));
+ if(gameState.population>=20&&gameState.era<1)gameState.era=1;
+ if(gameState.population>=60&&gameState.era<2&&gameState.wood>=40)gameState.era=2;
+ if(gameState.population>=150&&gameState.era<3&&gameState.stone>=100)gameState.era=3;
+ updateHUD();
+ saveTimer++;
+ if(saveTimer>=10){saveGame(false);saveTimer=0;}
+}
+function setPointerRay(event){
+ const rect=renderer.domElement.getBoundingClientRect();
+ pointerNdc.x=((event.clientX-rect.left)/rect.width)*2-1;
+ pointerNdc.y=-((event.clientY-rect.top)/rect.height)*2+1;
+ raycaster.setFromCamera(pointerNdc,camera);
+ return raycaster.intersectObject(terrain,false)[0]||null;
+}
+function updateGhostAt(event){
+ if(!ghost||!activeTool)return;
+ const hit=setPointerRay(event);
+ if(!hit){ghost.visible=false;return;}
+ const x=cellCenter(hit.point.x),z=cellCenter(hit.point.z);
+ const d=terrainData(x,z);
+ ghost.visible=true;
+ ghost.position.set(x,0,z);
+ ghost.children.forEach(o=>{
+  if(o.isMesh)o.material.opacity=(isLand(x,z)&&!["river","lake","snow","mountain"].includes(d.kind)&&footprintFree(activeTool,x,z))?0.48:0.18;
+ });
+}
+renderer.domElement.addEventListener("pointerdown",e=>{
+ if(e.pointerType==="mouse"&&e.button!==0)return;
+ pointerStart={x:e.clientX,y:e.clientY};pointerMoved=false;
+});
+renderer.domElement.addEventListener("pointermove",e=>{
+ if(pointerStart&&Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>7)pointerMoved=true;
+ if(!pointerMoved)updateGhostAt(e);
+});
+renderer.domElement.addEventListener("pointerup",e=>{
+ if(!pointerStart)return;
+ const moved=pointerMoved;
+ pointerStart=null;
+ if(moved||!activeTool)return;
+ const hit=setPointerRay(e);
+ if(!hit)return;
+ placeBuilding(activeTool,cellCenter(hit.point.x),cellCenter(hit.point.z));
+});
+renderer.domElement.addEventListener("pointercancel",()=>{pointerStart=null;pointerMoved=false;});
+document.getElementById("pauseBtn").addEventListener("click",()=>{
+ gameState.paused=!gameState.paused;updateHUD();showMessage(gameState.paused?"時間を停止しました":"時間を再開しました");
+});
+document.getElementById("saveBtn").addEventListener("click",()=>saveGame(true));
+document.getElementById("cancelBuild").addEventListener("click",()=>{
+ activeTool=null;if(ghost){scene.remove(ghost);ghost=null;}
+ document.querySelectorAll(".buildBtn").forEach(x=>x.classList.remove("active"));
+ document.getElementById("selectedTool").textContent="配置する建物を選択";
+ document.getElementById("inspect").textContent="建設選択を解除しました。";
+});
+document.getElementById("exportSave").addEventListener("click",()=>{
+ const data={version:6,seed:SEED,state:gameState,camera:{position:camera.position.toArray(),target:controls.target.toArray()}};
+ const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+ const url=URL.createObjectURL(blob);const a=document.createElement("a");
+ a.href=url;a.download="civilization-save.json";a.click();URL.revokeObjectURL(url);
+ showMessage("バックアップを書き出しました");
+});
+document.getElementById("importSave").addEventListener("click",()=>document.getElementById("importFile").click());
+document.getElementById("importFile").addEventListener("change",async e=>{
+ const file=e.target.files[0];if(!file)return;
+ try{loadGameData(JSON.parse(await file.text()));saveGame(false);showMessage("バックアップを読み込みました");}
+ catch(err){showMessage("このファイルは読み込めません");}
+ e.target.value="";
+});
+buildMenu();
+loadGame();
+updateHUD();
+setInterval(()=>{
+ if(gameState.paused)return;
+ gameState.elapsed++;
+ if(gameState.elapsed>=24){gameState.elapsed=0;advanceDay();}
+},1000);
+window.addEventListener("beforeunload",()=>saveGame(false));
+// ===== 文明シミュレーション本体ここまで =====
+
+
 // 初期表示
-camera.position.set(65,75,85);
 controls.target.set(0,0,0);
 
-document.getElementById("worldInfo").textContent="生成シード："+SEED;
+const landVertices=positions.count-terrainCounts.sea;
+document.getElementById("worldInfo").textContent=
+ "生成シード："+SEED+" / 陸地頂点："+landVertices.toLocaleString();
 document.getElementById("status").textContent=
- "森林 "+treeCount+"本 / 地形生成完了";
+ "森林 "+treeCount+"本 / 岩 "+rockCount+"個 / 地形生成完了";
 
 function resize(){
  camera.aspect=innerWidth/innerHeight;
@@ -469,8 +918,15 @@ function resize(){
 }
 window.addEventListener("resize",resize);
 
-function animate(){
+let previousFrame=0;
+function animate(now=0){
  requestAnimationFrame(animate);
+ const delta=Math.min((now-previousFrame)/1000,0.05);
+ previousFrame=now;
+ for(const cloud of clouds){
+  cloud.position.x+=cloud.userData.drift*delta;
+  if(cloud.position.x>155)cloud.position.x=-155;
+ }
  controls.update();
  renderer.render(scene,camera);
 }
