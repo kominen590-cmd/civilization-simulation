@@ -628,6 +628,7 @@ const treeTrunks=new THREE.InstancedMesh(trunkGeometry,trunkMaterial,MAX_TREES);
 const treeLeaves=new THREE.InstancedMesh(leafGeometry,leafMaterial,MAX_TREES);
 const dummy=new THREE.Object3D();
 let treeCount=0;
+const treeLocations=[];
 
 const forestCenters=[];
 for(let i=0;i<24;i++){
@@ -663,6 +664,7 @@ for(let i=0;i<MAX_TREES;i++){
 
  const scale=0.7+random()*0.65;
  const y=data.height;
+ treeLocations.push({x,z});
 
  dummy.position.set(x,y+0.6*scale,z);
  dummy.scale.setScalar(scale);
@@ -696,6 +698,7 @@ const rockGeometry=new THREE.DodecahedronGeometry(1,0);
 const rockMaterial=new THREE.MeshStandardMaterial({color:0x77776e,roughness:1});
 const rocks=new THREE.InstancedMesh(rockGeometry,rockMaterial,MAX_ROCKS);
 let rockCount=0;
+const rockLocations=[];
 for(let i=0;i<MAX_ROCKS*3&&rockCount<MAX_ROCKS;i++){
  const x=(random()-0.5)*WORLD_SIZE;
  const z=(random()-0.5)*WORLD_SIZE;
@@ -708,6 +711,7 @@ for(let i=0;i<MAX_ROCKS*3&&rockCount<MAX_ROCKS;i++){
  dummy.rotation.set(random()*0.4,random()*Math.PI*2,random()*0.4);
  dummy.updateMatrix();
  rocks.setMatrixAt(rockCount++,dummy.matrix);
+ rockLocations.push({x,z});
 }
 rocks.count=rockCount;
 rocks.instanceMatrix.needsUpdate=true;
@@ -785,6 +789,18 @@ let exploredCellSet=new Set();
 function isCellExplored(ix,iz){
  return exploredCellSet.has(ix+","+iz);
 }
+function footprintTerrainProfile(type,x,z){
+ const size=buildingTypes[type]?.size||1;
+ const a=cellAnchor(type,x,z),samples=[];
+ for(let dz=0;dz<size;dz++)for(let dx=0;dx<size;dx++){
+  const ix=a.x+dx,iz=a.z+dz;
+  const x0=GRID_ORIGIN+ix*CELL,z0=GRID_ORIGIN+iz*CELL;
+  const points=[[x0+CELL/2,z0+CELL/2],[x0,z0],[x0+CELL,z0],[x0+CELL,z0+CELL],[x0,z0+CELL]];
+  points.forEach(p=>samples.push(terrainData(p[0],p[1]).height));
+ }
+ const min=samples.length?Math.min(...samples):0,max=samples.length?Math.max(...samples):0;
+ return {min,max,average:samples.length?samples.reduce((a,b)=>a+b,0)/samples.length:0,grade:max-min};
+}
 function footprintTerrainValid(type,x,z){
  const size=buildingTypes[type]?.size||1;
  const a=cellAnchor(type,x,z);
@@ -792,11 +808,35 @@ function footprintTerrainValid(type,x,z){
  for(let dz=0;dz<size;dz++)for(let dx=0;dx<size;dx++){
   const ix=a.x+dx,iz=a.z+dz;
   if(!isCellExplored(ix,iz))return false;
-  const p=cellWorldCenter("hut",ix,iz);
-  const d=terrainData(p.x,p.z);
+  const p=cellWorldCenter("hut",ix,iz),d=terrainData(p.x,p.z);
   if(!d.land||["river","lake","snow","mountain"].includes(d.kind))return false;
  }
+ const profile=footprintTerrainProfile(type,x,z);
+ const limit=type==="farm"?1.0:type==="quarry"?2.0:1.5;
+ return profile.grade<=limit;
+}
+function footprintNaturalClear(type,x,z){
+ const size=buildingTypes[type]?.size||1,a=cellAnchor(type,x,z);
+ const x0=GRID_ORIGIN+a.x*CELL,z0=GRID_ORIGIN+a.z*CELL;
+ const x1=x0+size*CELL,z1=z0+size*CELL;
+ if(treeLocations.some(p=>p.x>x0+0.45&&p.x<x1-0.45&&p.z>z0+0.45&&p.z<z1-0.45))return false;
+ if(rockLocations.some(p=>p.x>x0+0.35&&p.x<x1-0.35&&p.z>z0+0.35&&p.z<z1-0.35))return false;
  return true;
+}
+function resourcePlacementCheck(type,x,z){
+ if(type==="farm"){
+  const value=localFarmPotential(x,z);
+  return value>=0.62?{valid:true,reason:""}:{valid:false,reason:"農業に向かない土地です。草地や水分のある平地を探してください。"};
+ }
+ if(type==="woodcutter"){
+  const value=localForestPotential(x,z);
+  return value>=0.22?{valid:true,reason:""}:{valid:false,reason:"近くに十分な森林がありません。森の縁を探してください。"};
+ }
+ if(type==="quarry"){
+  const d=terrainData(x,z);
+  return d.kind==="hill"&&d.height>=5?{valid:true,reason:""}:{valid:false,reason:"採石場には岩の多い丘陵地が必要です。"};
+ }
+ return {valid:true,reason:""};
 }
 const gameState={
  day:1,year:1,season:0,paused:false,elapsed:0,workforceByType:{farm:0,woodcutter:0,quarry:0,well:0},
@@ -1067,7 +1107,8 @@ function buildMenu(){
    updateFirstBuildHint();
    document.querySelectorAll(".buildBtn").forEach(x=>x.classList.toggle("active",x===button));
    document.getElementById("selectedTool").textContent=b.name+"を配置";
-   document.getElementById("inspect").textContent=b.desc+" 緑色のマスをタップして配置。";
+   const rule=id==="woodcutter"?"森林の縁に":id==="quarry"?"岩の多い丘陵に":id==="farm"?"農業に適した平地に":"地形が安定した場所に";
+   document.getElementById("inspect").textContent=b.desc+" "+rule+"配置してください。緑色は配置可能、赤色は不可です。";
    makeGhost();
   });
   root.appendChild(button);
@@ -1077,7 +1118,7 @@ function makeBuildingMesh(type,x,z){
  const b=buildingTypes[type];
  const group=new THREE.Group();
  const size=b.size||1;
- const baseY=terrainData(x,z).height;
+ const baseY=footprintTerrainProfile(type,x,z).average;
  const footprint=CELL*size*0.88;
  const base=new THREE.Mesh(
   new THREE.BoxGeometry(footprint,0.45,footprint),
@@ -1131,7 +1172,10 @@ function placeBuilding(type,x,z){
  if(!b)return;
  const position=buildingPositionFromPoint(type,x,z);
  x=position.x;z=position.z;
- if(!footprintTerrainValid(type,x,z)){showMessage("建物の占有マスに建設できない地形が含まれています");return;}
+ if(!footprintTerrainValid(type,x,z)){showMessage("地形が建設条件に合いません。平坦で安定した土地を選んでください。");return;}
+ if(!footprintNaturalClear(type,x,z)){showMessage("木や岩があるため建設できません。少し場所をずらしてください。");return;}
+ const resourceCheck=resourcePlacementCheck(type,x,z);
+ if(!resourceCheck.valid){showMessage(resourceCheck.reason,2400);return;}
  if(!footprintFree(type,x,z)){showMessage("建物が重なっています");return;}
  if(gameState.wood<(b.cost.wood||0)||gameState.stone<(b.cost.stone||0)||gameState.money<b.cost.money){
   showMessage("資源または資金が足りません");return;
@@ -1382,9 +1426,9 @@ function buildingPlacementSummary(type,x,z){
  const b=buildingTypes[type];
  const cost="必要資源：木"+(b.cost.wood||0)+" / 石"+(b.cost.stone||0)+" / "+b.cost.money+"G";
  if(type==="hut")return cost+" / 住居定員 +"+(b.capacity||0);
- if(type==="farm")return cost+" / 食料見込み：約"+Math.floor(6*localFarmPotential(x,z))+"（5日ごと・最大労働時）";
- if(type==="woodcutter")return cost+" / 木材見込み：約"+Math.floor(2*localForestPotential(x,z))+"（3日ごと・最大労働時）";
- if(type==="quarry")return cost+" / 石材見込み：約"+(terrainData(x,z).kind==="hill"?1.6:0.65)+"（3日ごと・最大労働時）";
+ if(type==="farm")return cost+" / 農業適性 "+Math.round(localFarmPotential(x,z)*100)+"%・食料見込み：約"+Math.floor(6*localFarmPotential(x,z))+"（5日ごと）";
+ if(type==="woodcutter")return cost+" / 森林資源 "+Math.round(localForestPotential(x,z)*100)+"%・木材見込み：約"+Math.floor(2*localForestPotential(x,z))+"（3日ごと）";
+ if(type==="quarry")return cost+" / 丘陵・岩場で採石";
  return cost+" / "+b.desc;
 }
 function updateCellPreview(event){
@@ -1398,9 +1442,11 @@ function updateCellPreview(event){
  const checkingPlacement=!selecting&&!!activeTool;
  const explored=!checkingPlacement?true:footprintCellKeys(type,p.x,p.z).every(key=>{const parts=key.split(",").map(Number);return isCellExplored(parts[0],parts[1]);});
  const terrainValid=!checkingPlacement||footprintTerrainValid(type,p.x,p.z);
+ const naturalClear=!checkingPlacement||footprintNaturalClear(type,p.x,p.z);
+ const resourceCheck=checkingPlacement?resourcePlacementCheck(type,p.x,p.z):{valid:true,reason:""};
  const free=!checkingPlacement||footprintFree(type,p.x,p.z);
  const affordable=!checkingPlacement||(gameState.wood>=(buildingTypes[type].cost.wood||0)&&gameState.stone>=(buildingTypes[type].cost.stone||0)&&gameState.money>=buildingTypes[type].cost.money);
- const valid=!checkingPlacement||(explored&&terrainValid&&free&&affordable);
+ const valid=!checkingPlacement||(explored&&terrainValid&&naturalClear&&resourceCheck.valid&&free&&affordable);
  const points=[];
  const yOffset=0.22;
  for(let dz=0;dz<size;dz++)for(let dx=0;dx<size;dx++){
@@ -1427,7 +1473,7 @@ function updateCellPreview(event){
  cellPreview.renderOrder=20;
  scene.add(cellPreview);
  if(activeTool&&!selecting){
-  const status=!explored?"未探索の土地です。先にカメラを移動して発見してください。":!terrainValid?"この地形には建設できません。":!free?"ほかの建物と重なっています。":!affordable?"資源または資金が不足しています。":"配置可能です。 "+buildingPlacementSummary(type,p.x,p.z);
+  const status=!explored?"未探索の土地です。先にカメラを移動して発見してください。":!terrainValid?"傾斜が急すぎるか、建設できない地形です。":!naturalClear?"木や岩に重なっています。少し場所をずらしてください。":!resourceCheck.valid?resourceCheck.reason:!free?"ほかの建物と重なっています。":!affordable?"資源または資金が不足しています。":"配置可能です。 "+buildingPlacementSummary(type,p.x,p.z);
   document.getElementById("inspect").textContent=status;
  }
  if(ghost){
