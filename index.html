@@ -43,6 +43,7 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 .goalItem{display:flex;gap:6px;align-items:flex-start;font-size:10px;line-height:1.35;color:#d5dfd2}
 .goalMark{flex:none;width:14px;height:14px;border:1px solid #9eaf99;border-radius:4px;text-align:center;line-height:12px;font-size:10px}
 .goalItem.done{color:#9fcea0}.goalItem.done .goalMark{background:#416b42;border-color:#8cbd85;color:#fff}
+.goalItem.current{color:#fff2c8;font-weight:700}.goalItem.current .goalMark{border-color:#f1d27c;background:#66562e}
 #goalNote{font-size:9px;color:#9eaf9b;margin-top:5px;line-height:1.45}
 #firstBuildHint{font-size:10px;line-height:1.45;color:#d8e8c9;background:#304832;border:1px solid #607d58;border-radius:7px;padding:6px 8px;margin:0 0 7px}
 #savePanel{display:flex;gap:5px;margin-top:7px}
@@ -195,7 +196,7 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 <div id="goalPanel" aria-live="polite">
  <h3><span>最初の集落</span><span id="goalProgress">0 / 4</span></h3>
  <div id="goalList"></div>
- <div id="goalNote">人口は食料・空き住居・満足度がそろうと10日ごとに増えます。目標は自由に無視できます。</div>
+ <div id="goalNote">次のおすすめ行動をここに表示します。目標は自由に無視できます。</div>
 </div>
 <div id="economyPanel" aria-modal="true" role="dialog" aria-labelledby="economyTitle">
  <div id="economyCard">
@@ -884,10 +885,10 @@ function clampCameraToWorld(){
  controls.target.z=THREE.MathUtils.clamp(controls.target.z+shiftZ,-limit,limit);
 }
 const START_GOALS=[
- {id:"survey",title:"周囲の土地を確認する",done:()=>gameState.firstCellSelected},
- {id:"housing",title:"住居をもう1軒建てる",done:()=>gameState.buildings.filter(b=>b.type==="hut").length>=2},
- {id:"wood",title:"伐採所を建てる",done:()=>gameState.buildings.some(b=>b.type==="woodcutter")},
- {id:"growth",title:"人口を6人以上に増やす",done:()=>gameState.population>=6}
+ {id:"survey",title:"周囲の土地を確認する",hint:"選択モードに切り替え、発見済みの草原マスをタップして地形と資源を確認しましょう。",done:()=>gameState.firstCellSelected},
+ {id:"housing",title:"住居をもう1軒建てる",hint:"建設メニューから住居を選び、緑色のマスに配置しましょう。人口の上限が5人増えます。",done:()=>gameState.buildings.filter(b=>b.type==="hut").length>=2},
+ {id:"wood",title:"伐採所を建てる",hint:"森林資源の多い場所を探し、木材を生産できる位置に伐採所を建てましょう。",done:()=>gameState.buildings.some(b=>b.type==="woodcutter")},
+ {id:"growth",title:"人口を6人以上に増やす",hint:"食料を十分に保ち、住居に空きを作り、満足度を維持しましょう。人口は条件がそろうと10日ごとに増えます。",done:()=>gameState.population>=6}
 ];
 const seasons=["春","夏","秋","冬"];
 const eras=["原始時代","農耕時代","金属時代","中世時代","産業時代","近代","先進時代"];
@@ -1024,11 +1025,15 @@ function updateStartGoals(announce=true){
   }
  });
  const completed=START_GOALS.filter(goal=>gameState.completedStartGoals.includes(goal.id)).length;
+ const current=START_GOALS.find(goal=>!gameState.completedStartGoals.includes(goal.id));
  document.getElementById("goalProgress").textContent=completed+" / "+START_GOALS.length;
  list.innerHTML=START_GOALS.map(goal=>{
   const done=gameState.completedStartGoals.includes(goal.id);
-  return '<div class="goalItem'+(done?" done":"")+'"><span class="goalMark">'+(done?"✓":"")+"</span><span>"+goal.title+"</span></div>";
+  const active=!done&&current===goal;
+  return '<div class="goalItem'+(done?" done":active?" current":"")+'"><span class="goalMark">'+(done?"✓":active?"›":"")+"</span><span>"+goal.title+(active?"　← 次の目標":"")+"</span></div>";
  }).join("");
+ const note=document.getElementById("goalNote");
+ note.textContent=current?("次のおすすめ："+current.hint):"最初の集落づくりが完了しました。ここから先は自由に文明を発展させましょう。人口増加には食料・空き住居・満足度が必要です。";
  if(changed)saveGame(false);
 }
 function updateFirstBuildHint(){
