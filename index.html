@@ -133,6 +133,10 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
   <div class="stat">資金<b id="moneyValue">120</b></div>
   <div class="stat">食料<b id="foodValue">80</b></div>
   <div class="stat">木材 / 石材<b id="materialsValue">35 / 15</b></div>
+   <div class="stat">住居定員<b id="housingValue">5 / 13人</b></div>
+   <div class="stat">就業<b id="employmentValue">0 / 4人</b></div>
+   <div class="stat">満足度<b id="happinessValue">55%</b></div>
+   <div class="stat">保管上限<b id="storageValue">100</b></div>
  </div>
  <div id="timeControls">
   <button class="uiBtn" id="pauseBtn">Ⅱ 一時停止</button>
@@ -669,7 +673,7 @@ const CELL=4;
 const gameState={
  day:1,year:1,season:0,paused:false,elapsed:0,
  population:5,money:120,food:80,wood:35,stone:15,
- housing:8,workers:5,buildings:[],selected:null,
+ housing:8,workers:4,employed:0,happiness:55,buildings:[],selected:null,
  nextId:1,foodProduced:0,woodProduced:0,stoneProduced:0,
  research:0,era:0,lastGrowth:0
 };
@@ -708,6 +712,27 @@ function showMessage(text){
  messageTimer=setTimeout(()=>el.classList.remove("show"),1800);
 }
 function moneyText(n){return Math.floor(n).toLocaleString("ja-JP");}
+function settlementCapacity(){
+ return 100+gameState.buildings.filter(b=>b.type==="store").length*100;
+}
+function allocateLabor(){
+ let available=Math.max(0,Math.floor(gameState.population*0.8));
+ gameState.workers=available;
+ const counts={farm:0,woodcutter:0,quarry:0,well:0};
+ gameState.buildings.forEach(b=>{if(counts[b.type]!==undefined)counts[b.type]++;});
+ const allocate=(type,perBuilding)=>{
+  const need=counts[type]*perBuilding;
+  const assigned=Math.min(available,need);
+  available-=assigned;
+  return need?assigned/need:1;
+ };
+ const farm=allocate("farm",2);
+ const wood=allocate("woodcutter",2);
+ const stone=allocate("quarry",2);
+ const water=allocate("well",1);
+ gameState.employed=gameState.workers-available;
+ return {farm,wood,stone,water};
+}
 function updateHUD(){
  document.getElementById("dateValue").textContent=
   gameState.year+"年 "+seasons[gameState.season]+" "+gameState.day+"日";
@@ -717,6 +742,10 @@ function updateHUD(){
  document.getElementById("foodValue").textContent=moneyText(gameState.food);
  document.getElementById("materialsValue").textContent=
   moneyText(gameState.wood)+" / "+moneyText(gameState.stone);
+ document.getElementById("housingValue").textContent=gameState.population+" / "+gameState.housing+"人";
+ document.getElementById("employmentValue").textContent=gameState.employed+" / "+gameState.workers+"人";
+ document.getElementById("happinessValue").textContent=Math.round(gameState.happiness)+"%";
+ document.getElementById("storageValue").textContent=settlementCapacity();
  document.getElementById("pauseBtn").textContent=gameState.paused?"▶ 再開":"Ⅱ 一時停止";
  document.getElementById("status").textContent=
   "建物 "+gameState.buildings.length+"棟 / 労働力 "+gameState.workers+"人";
@@ -841,7 +870,7 @@ function loadGameData(data){
  if(!data||data.version!==6||!data.state)throw new Error("保存データの形式が違います");
  if(Number(data.seed)!==SEED)throw new Error("このバックアップは別のワールドのデータです");
  const s=data.state;
- const numeric=["day","year","season","population","money","food","wood","stone","housing","workers","nextId","era","elapsed","research","lastGrowth","foodProduced","woodProduced","stoneProduced"];
+ const numeric=["day","year","season","population","money","food","wood","stone","housing","workers","employed","happiness","nextId","era","elapsed","research","lastGrowth","foodProduced","woodProduced","stoneProduced"];
  numeric.forEach(k=>{if(Number.isFinite(Number(s[k])))gameState[k]=Number(s[k]);});
  gameState.buildings=Array.isArray(s.buildings)?s.buildings.filter(b=>buildingTypes[b.type]&&Number.isFinite(b.x)&&Number.isFinite(b.z)): [];
  gameState.paused=!!s.paused;
@@ -854,7 +883,7 @@ function loadGameData(data){
 function initializeNewGame(){
  gameState.day=1;gameState.year=1;gameState.season=0;gameState.paused=false;gameState.elapsed=0;
  gameState.population=5;gameState.money=120;gameState.food=80;gameState.wood=35;gameState.stone=15;
- gameState.housing=8;gameState.workers=5;gameState.buildings=[];gameState.selected=null;
+ gameState.housing=8;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.buildings=[];gameState.selected=null;
  gameState.nextId=1;gameState.foodProduced=0;gameState.woodProduced=0;gameState.stoneProduced=0;
  gameState.research=0;gameState.era=0;gameState.lastGrowth=0;
  gameState.buildings=[{id:gameState.nextId++,type:"hut",x:-58,z:-22,builtDay:1},{id:gameState.nextId++,type:"farm",x:-24,z:-32,builtDay:1}];
@@ -890,27 +919,35 @@ function advanceDay(){
  const quarries=gameState.buildings.filter(b=>b.type==="quarry").length;
  const wells=gameState.buildings.filter(b=>b.type==="well").length;
  const plazas=gameState.buildings.filter(b=>b.type==="plaza").length;
+ const labor=allocateLabor();
+ const capacity=settlementCapacity();
  if(gameState.day%5===0){
-  const produced=farms*3;
-  gameState.food+=produced;gameState.foodProduced+=produced;
+  const produced=Math.floor(farms*3*labor.farm);
+  gameState.food=Math.min(capacity,gameState.food+produced);
+  gameState.foodProduced+=produced;
  }
  if(gameState.day%3===0){
-  const produced=cutters*(forestCenters.length?2:1);
-  gameState.wood+=produced;gameState.woodProduced+=produced;
-  const stone=quarries;
-  gameState.stone+=stone;gameState.stoneProduced+=stone;
+  const produced=Math.floor(cutters*(forestCenters.length?2:1)*labor.wood);
+  const stone=Math.floor(quarries*labor.stone);
+  gameState.wood=Math.min(capacity,gameState.wood+produced);
+  gameState.stone=Math.min(capacity,gameState.stone+stone);
+  gameState.woodProduced+=produced;gameState.stoneProduced+=stone;
  }
- const consumption=Math.max(1,Math.ceil(gameState.population*0.16));
+ const consumption=Math.max(1,Math.ceil(gameState.population*0.12));
  gameState.food=Math.max(0,gameState.food-consumption);
+ const foodRatio=gameState.food>0?Math.min(1,gameState.food/Math.max(1,gameState.population*5)):0;
+ const waterCoverage=Math.min(1,wells/Math.max(1,Math.ceil(gameState.population/25)));
+ gameState.happiness=Math.max(10,Math.min(100,50+waterCoverage*20+Math.min(20,plazas*5)+(foodRatio-0.5)*30));
  gameState.money-=Math.max(0,gameState.buildings.length*0.08);
  gameState.money+=Math.floor(gameState.population*0.025);
- if(gameState.food===0&&gameState.population>5){
-  gameState.population=Math.max(5,gameState.population-1);
+ if(gameState.food===0&&gameState.day%5===0&&gameState.population>1){
+  gameState.population=Math.max(1,gameState.population-1);
+  showMessage("食料不足で人口が減少しました");
  }
- if(gameState.food>gameState.population*4&&gameState.population<gameState.housing&&gameState.day%10===0){
+ if(gameState.food>gameState.population*5&&gameState.population<gameState.housing&&gameState.happiness>=50&&gameState.day%10===0){
   gameState.population++;
  }
- gameState.workers=Math.max(0,gameState.population-Math.ceil(gameState.population*0.2));
+ allocateLabor();
  if(gameState.population>=20&&gameState.era<1)gameState.era=1;
  if(gameState.population>=60&&gameState.era<2&&gameState.wood>=40)gameState.era=2;
  if(gameState.population>=150&&gameState.era<3&&gameState.stone>=100)gameState.era=3;
