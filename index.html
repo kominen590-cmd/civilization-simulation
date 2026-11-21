@@ -41,7 +41,8 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 .goalItem{display:flex;gap:6px;align-items:flex-start;font-size:10px;line-height:1.35;color:#d5dfd2}
 .goalMark{flex:none;width:14px;height:14px;border:1px solid #9eaf99;border-radius:4px;text-align:center;line-height:12px;font-size:10px}
 .goalItem.done{color:#9fcea0}.goalItem.done .goalMark{background:#416b42;border-color:#8cbd85;color:#fff}
-#goalNote{font-size:9px;color:#9eaf9b;margin-top:5px}
+#goalNote{font-size:9px;color:#9eaf9b;margin-top:5px;line-height:1.45}
+#firstBuildHint{font-size:10px;line-height:1.45;color:#d8e8c9;background:#304832;border:1px solid #607d58;border-radius:7px;padding:6px 8px;margin:0 0 7px}
 #savePanel{display:flex;gap:5px;margin-top:7px}
 #savePanel button{flex:1}
 @media(max-width:520px){
@@ -178,10 +179,11 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 <div id="goalPanel" aria-live="polite">
  <h3><span>最初の集落</span><span id="goalProgress">0 / 4</span></h3>
  <div id="goalList"></div>
- <div id="goalNote">目標は自由に無視して発展できます。</div>
+ <div id="goalNote">人口は食料・空き住居・満足度がそろうと10日ごとに増えます。目標は自由に無視できます。</div>
 </div>
 <div id="bottomPanel">
  <div id="buildHeader"><b>建設メニュー</b><span id="selectedTool">配置する建物を選択</span></div>
+ <div id="firstBuildHint">最初の建設：下の建物を選び、緑色の配置マスをタップしましょう。</div>
  <div id="buildButtons"></div>
  <div id="inspect">地面をタップすると建設位置を選べます。建物を選んでから地面をタップしてください。</div>
  <div id="savePanel">
@@ -758,7 +760,7 @@ function footprintTerrainValid(type,x,z){
 }
 const gameState={
  day:1,year:1,season:0,paused:false,elapsed:0,
- firstCellSelected:false,
+ firstCellSelected:false,completedStartGoals:[],
  population:5,money:120,food:80,wood:35,stone:15,
  housing:8,workers:4,employed:0,happiness:55,buildings:[],selected:null,
  nextId:1,foodProduced:0,woodProduced:0,stoneProduced:0,
@@ -801,11 +803,11 @@ const pointerNdc=new THREE.Vector2();
 const groundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
 const tempPoint=new THREE.Vector3();
 
-function showMessage(text){
+function showMessage(text,duration=1800){
  const el=document.getElementById("message");
  el.textContent=text;el.classList.add("show");
  clearTimeout(messageTimer);
- messageTimer=setTimeout(()=>el.classList.remove("show"),1800);
+ messageTimer=setTimeout(()=>el.classList.remove("show"),duration);
 }
 function moneyText(n){return Math.floor(n).toLocaleString("ja-JP");}
 function settlementCapacity(){
@@ -829,7 +831,7 @@ function allocateLabor(){
  gameState.employed=gameState.workers-available;
  return {farm,wood,stone,water};
 }
-function updateHUD(){
+function updateHUD(announceGoals=true){
  document.getElementById("dateValue").textContent=
   gameState.year+"年 "+seasons[gameState.season]+" "+gameState.day+"日";
  document.getElementById("eraValue").textContent=eras[gameState.era];
@@ -845,17 +847,39 @@ function updateHUD(){
  document.getElementById("pauseBtn").textContent=gameState.paused?"▶ 再開":"Ⅱ 一時停止";
  document.getElementById("status").textContent=
   "建物 "+gameState.buildings.length+"棟 / 労働力 "+gameState.workers+"人";
- updateStartGoals();
+ updateStartGoals(announceGoals);
+ updateFirstBuildHint();
 }
-function updateStartGoals(){
+function updateStartGoals(announce=true){
  const list=document.getElementById("goalList");
  if(!list)return;
- const completed=START_GOALS.filter(goal=>goal.done()).length;
+ if(!Array.isArray(gameState.completedStartGoals))gameState.completedStartGoals=[];
+ let changed=false;
+ START_GOALS.forEach(goal=>{
+  if(goal.done()&&!gameState.completedStartGoals.includes(goal.id)){
+   gameState.completedStartGoals.push(goal.id);changed=true;
+   if(announce)showMessage("目標達成："+goal.title,2600);
+  }
+ });
+ const completed=START_GOALS.filter(goal=>gameState.completedStartGoals.includes(goal.id)).length;
  document.getElementById("goalProgress").textContent=completed+" / "+START_GOALS.length;
  list.innerHTML=START_GOALS.map(goal=>{
-  const done=goal.done();
+  const done=gameState.completedStartGoals.includes(goal.id);
   return '<div class="goalItem'+(done?" done":"")+'"><span class="goalMark">'+(done?"✓":"")+"</span><span>"+goal.title+"</span></div>";
  }).join("");
+ if(changed)saveGame(false);
+}
+function updateFirstBuildHint(){
+ const hint=document.getElementById("firstBuildHint");
+ if(!hint)return;
+ if(gameState.buildings.length<=2){
+  hint.textContent=activeTool
+   ?"配置中："+buildingTypes[activeTool].name+"。緑色のマスをタップすると建設できます。"
+   :"最初の建設：下の建物を選び、緑色の配置マスをタップしましょう。";
+  hint.style.display="block";
+ }else{
+  hint.style.display="none";
+ }
 }
 function buildMenu(){
  const root=document.getElementById("buildButtons");
@@ -866,10 +890,12 @@ function buildMenu(){
   button.dataset.type=id;
   button.innerHTML=b.name+"<small>木 "+(b.cost.wood||0)+" / 石 "+(b.cost.stone||0)+" / "+b.cost.money+"G</small>";
   button.addEventListener("click",()=>{
+   if(interactionMode==="select")setInteractionMode("move");
    activeTool=id;
+   updateFirstBuildHint();
    document.querySelectorAll(".buildBtn").forEach(x=>x.classList.toggle("active",x===button));
    document.getElementById("selectedTool").textContent=b.name+"を配置";
-   document.getElementById("inspect").textContent=b.desc+" 地面をタップして配置。";
+   document.getElementById("inspect").textContent=b.desc+" 緑色のマスをタップして配置。";
    makeGhost();
   });
   root.appendChild(button);
@@ -941,6 +967,7 @@ function placeBuilding(type,x,z){
  gameState.wood-=b.cost.wood||0;
  gameState.stone-=b.cost.stone||0;
  gameState.money-=b.cost.money;
+ const firstPlayerBuilding=gameState.buildings.length===2;
  const item={id:gameState.nextId++,type,x,z,builtDay:gameState.day};
  gameState.buildings.push(item);
  const mesh=makeBuildingMesh(type,x,z);
@@ -950,6 +977,7 @@ function placeBuilding(type,x,z){
  allocateLabor();
  document.getElementById("inspect").textContent=b.name+"を建設した。";
  updateHUD();saveGame(false);
+ if(firstPlayerBuilding&&type!=="hut"&&type!=="woodcutter")showMessage("最初の建物が完成しました！",2400);
 }
 function removeAllBuildings(){
  buildingGroup.clear();buildingMeshes.clear();
@@ -984,9 +1012,10 @@ function loadGameData(data){
  const numeric=["day","year","season","population","money","food","wood","stone","housing","workers","employed","happiness","nextId","era","elapsed","research","lastGrowth","foodProduced","woodProduced","stoneProduced"];
  numeric.forEach(k=>{if(Number.isFinite(Number(s[k])))gameState[k]=Number(s[k]);});
  gameState.firstCellSelected=!!s.firstCellSelected;
+ gameState.completedStartGoals=Array.isArray(s.completedStartGoals)?s.completedStartGoals.filter(id=>START_GOALS.some(g=>g.id===id)):[];
  gameState.buildings=Array.isArray(s.buildings)?s.buildings.filter(b=>buildingTypes[b.type]&&Number.isFinite(b.x)&&Number.isFinite(b.z)): [];
  gameState.paused=!!s.paused;
- restoreBuildings();updateHUD();
+ restoreBuildings();updateHUD(false);
  if(data.camera){
   if(Array.isArray(data.camera.position))camera.position.fromArray(data.camera.position);
   if(Array.isArray(data.camera.target))controls.target.fromArray(data.camera.target);
@@ -994,13 +1023,19 @@ function loadGameData(data){
 }
 function initializeNewGame(){
  gameState.day=1;gameState.year=1;gameState.season=0;gameState.paused=true;gameState.elapsed=0;
- gameState.firstCellSelected=false;
+ gameState.firstCellSelected=false;gameState.completedStartGoals=[];
  gameState.population=5;gameState.money=120;gameState.food=80;gameState.wood=35;gameState.stone=15;
  gameState.housing=8;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.buildings=[];gameState.selected=null;
  gameState.nextId=1;gameState.foodProduced=0;gameState.woodProduced=0;gameState.stoneProduced=0;
  gameState.research=0;gameState.era=0;gameState.lastGrowth=0;
  gameState.buildings=[{id:gameState.nextId++,type:"hut",x:-58,z:-22,builtDay:1},{id:gameState.nextId++,type:"farm",x:-24,z:-32,builtDay:1}];
- restoreBuildings();updateHUD();saveGame(false);
+ restoreBuildings();
+ controls.target.set(START_PLAIN.x,0,START_PLAIN.z);
+ camera.position.set(START_PLAIN.x+43,70,START_PLAIN.z+63);
+ controls.update();
+ setInteractionMode("move");
+ activeTool=null;
+ updateHUD(false);saveGame(false);
 }
 function loadGame(){
  try{
@@ -1206,6 +1241,7 @@ document.getElementById("cancelBuild").addEventListener("click",()=>{
  document.querySelectorAll(".buildBtn").forEach(x=>x.classList.remove("active"));
  document.getElementById("selectedTool").textContent="配置する建物を選択";
  document.getElementById("inspect").textContent="建設選択を解除しました。";
+ updateFirstBuildHint();
 });
 document.getElementById("exportSave").addEventListener("click",()=>{
  const data={version:6,seed:SEED,state:gameState,camera:{position:camera.position.toArray(),target:controls.target.toArray()}};
