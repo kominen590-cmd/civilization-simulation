@@ -23,7 +23,7 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 #hud{position:fixed;z-index:8;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-end;pointer-events:none}
 #stats{display:grid;grid-template-columns:repeat(2,minmax(82px,1fr));gap:4px;background:#17251ced;padding:8px;border-radius:10px;min-width:178px}
 .stat{font-size:10px;color:#cbd9cb}.stat b{display:block;color:white;font-size:13px;margin-top:2px}
-#timeControls{display:flex;gap:5px;pointer-events:auto}
+#timeControls{display:flex;gap:5px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end}
 .uiBtn,.buildBtn{border:1px solid #718b70;background:#263d2b;color:#fff;border-radius:8px;padding:8px 10px;font-size:12px;min-height:36px}
 .uiBtn:active,.buildBtn:active,.buildBtn.active{background:#54784b}
 #bottomPanel{position:fixed;z-index:9;left:8px;right:8px;bottom:8px;background:#17251cf2;border:1px solid #61755d;border-radius:13px;padding:8px;max-height:34vh;overflow:auto;pointer-events:auto}
@@ -159,6 +159,7 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
    <div class="stat">保管上限<b id="storageValue">100</b></div>
  </div>
  <div id="timeControls">
+  <button class="uiBtn" id="modeBtn" aria-pressed="false">移動モード</button>
   <button class="uiBtn" id="pauseBtn">Ⅱ 一時停止</button>
   <button class="uiBtn" id="saveBtn">保存</button>
  </div>
@@ -763,6 +764,9 @@ const buildingMeshes=new Map();
 const buildingGroup=new THREE.Group();
 scene.add(buildingGroup);
 let activeTool=null;
+let interactionMode="move"; // move: camera/build, select: choose a logical cell
+let selectedCell=null;
+let selectedCellOutline=null;
 let pointerStart=null;
 let pointerMoved=false;
 let lastSimTime=performance.now();
@@ -1042,11 +1046,12 @@ function clearCellPreview(){
 function updateCellPreview(event){
  const hit=setPointerRay(event);
  if(!hit){clearCellPreview();if(ghost)ghost.visible=false;return;}
- const type=activeTool||"hut";
- const p=buildingPositionFromPoint(type,hit.point.x,hit.point.z);
- const a=cellAnchor(type,p.x,p.z);
- const size=activeTool?(buildingTypes[type].size||1):1;
- const valid=activeTool?footprintTerrainValid(type,p.x,p.z)&&footprintFree(type,p.x,p.z):true;
+ const selecting=interactionMode==="select";
+ const type=selecting?"hut":(activeTool||"hut");
+ const p=selecting?{x:hit.point.x,z:hit.point.z}:buildingPositionFromPoint(type,hit.point.x,hit.point.z);
+ const a=selecting?{x:worldToCell(hit.point.x),z:worldToCell(hit.point.z)}:cellAnchor(type,p.x,p.z);
+ const size=selecting?1:(activeTool?(buildingTypes[type].size||1):1);
+ const valid=selecting?true:(activeTool?footprintTerrainValid(type,p.x,p.z)&&footprintFree(type,p.x,p.z):true);
  const points=[];
  const yOffset=0.22;
  for(let dz=0;dz<size;dz++)for(let dx=0;dx<size;dx++){
@@ -1065,16 +1070,16 @@ function updateCellPreview(event){
  const geometry=new THREE.BufferGeometry();
  geometry.setAttribute("position",new THREE.Float32BufferAttribute(points,3));
  const material=new THREE.LineBasicMaterial({
-  color:activeTool?(valid?0x55ff88:0xff5555):0xffffff,
-  transparent:true,opacity:activeTool?0.98:0.78,
+  color:selecting?0xffdf70:(activeTool?(valid?0x55ff88:0xff5555):0xffffff),
+  transparent:true,opacity:selecting?0.95:(activeTool?0.98:0.78),
   depthTest:false
  });
  cellPreview=new THREE.LineSegments(geometry,material);
  cellPreview.renderOrder=20;
  scene.add(cellPreview);
  if(ghost){
-  ghost.visible=!!activeTool;
-  if(activeTool){
+  ghost.visible=!selecting&&!!activeTool;
+  if(activeTool&&!selecting){
    ghost.position.set(p.x,0,p.z);
    ghost.traverse(o=>{if(o.isMesh)o.material.opacity=valid?0.48:0.18;});
   }
@@ -1093,13 +1098,61 @@ renderer.domElement.addEventListener("pointerleave",()=>{
  clearCellPreview();
  if(ghost)ghost.visible=false;
 });
+function selectLogicalCell(hit){
+ const ix=worldToCell(hit.point.x),iz=worldToCell(hit.point.z);
+ const center=cellWorldCenter("hut",ix,iz);
+ const terrain=terrainData(center.x,center.z);
+ const key=ix+","+iz;
+ const building=gameState.buildings.find(b=>footprintCellKeys(b.type,b.x,b.z).includes(key));
+ selectedCell={ix,iz};
+ if(selectedCellOutline){scene.remove(selectedCellOutline);selectedCellOutline.geometry.dispose();selectedCellOutline.material.dispose();}
+ const x0=GRID_ORIGIN+ix*CELL,z0=GRID_ORIGIN+iz*CELL,x1=x0+CELL,z1=z0+CELL;
+ const corners=[[x0,z0],[x1,z0],[x1,z1],[x0,z1]],points=[];
+ for(let i=0;i<4;i++){
+  const a=corners[i],b=corners[(i+1)%4];
+  points.push(a[0],terrainData(a[0],a[1]).height+0.3,a[1],b[0],terrainData(b[0],b[1]).height+0.3,b[1]);
+ }
+ const geometry=new THREE.BufferGeometry();
+ geometry.setAttribute("position",new THREE.Float32BufferAttribute(points,3));
+ const material=new THREE.LineBasicMaterial({color:0xffc94f,depthTest:false,transparent:true,opacity:1});
+ selectedCellOutline=new THREE.LineSegments(geometry,material);
+ selectedCellOutline.renderOrder=21;scene.add(selectedCellOutline);
+ const terrainNames={plain:"平地",forest:"森林",hill:"丘陵",mountain:"山地",beach:"海岸",river:"川",lake:"湖",snow:"雪原",sea:"海"};
+ document.getElementById("inspect").textContent=
+  "選択マス ("+(ix+1)+", "+(iz+1)+") / 地形："+(terrainNames[terrain.kind]||terrain.kind||"不明")+
+  " / 建物："+(building?buildingTypes[building.type].name:"なし");
+}
+function setInteractionMode(mode){
+ interactionMode=mode==="select"?"select":"move";
+ controls.enabled=interactionMode==="move";
+ pointerStart=null;pointerMoved=false;clearCellPreview();
+ if(ghost)ghost.visible=interactionMode==="move"&&!!activeTool;
+ const button=document.getElementById("modeBtn");
+ button.textContent=interactionMode==="move"?"移動モード":"選択モード";
+ button.setAttribute("aria-pressed",String(interactionMode==="select"));
+ document.getElementById("help").textContent=interactionMode==="move"
+  ?"移動モード：ドラッグで視点操作 / 建物を選んで地面をタップ：建設"
+  :"選択モード：カメラ移動停止 / マスをタップして地形・建物を確認";
+ document.getElementById("inspect").textContent=interactionMode==="move"
+  ?"移動モードです。マスを選択するには選択モードに切り替えてください。"
+  :"マスをタップして選択してください。カメラは移動しません。";
+}
+document.getElementById("modeBtn").addEventListener("click",()=>{
+ setInteractionMode(interactionMode==="move"?"select":"move");
+});
 renderer.domElement.addEventListener("pointerup",e=>{
  if(!pointerStart)return;
  const moved=pointerMoved;
  pointerStart=null;
- if(moved||!activeTool)return;
+ if(moved)return;
  const hit=setPointerRay(e);
  if(!hit)return;
+ if(interactionMode==="select"){
+  selectLogicalCell(hit);
+  clearCellPreview();
+  return;
+ }
+ if(!activeTool)return;
  const p=buildingPositionFromPoint(activeTool,hit.point.x,hit.point.z);
  placeBuilding(activeTool,p.x,p.z);
  if(e.pointerType!=="mouse")clearCellPreview();
