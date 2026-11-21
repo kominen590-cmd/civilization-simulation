@@ -977,7 +977,7 @@ function placeBuilding(type,x,z){
  allocateLabor();
  document.getElementById("inspect").textContent=b.name+"を建設した。";
  updateHUD();saveGame(false);
- if(firstPlayerBuilding)showMessage("最初の建物が完成しました！",2400);
+ if(firstPlayerBuilding&&type!=="hut"&&type!=="woodcutter")showMessage("最初の建物が完成しました！",2400);
 }
 function removeAllBuildings(){
  buildingGroup.clear();buildingMeshes.clear();
@@ -1031,7 +1031,7 @@ function initializeNewGame(){
  gameState.buildings=[{id:gameState.nextId++,type:"hut",x:-58,z:-22,builtDay:1},{id:gameState.nextId++,type:"farm",x:-24,z:-32,builtDay:1}];
  restoreBuildings();
  controls.target.set(START_PLAIN.x,0,START_PLAIN.z);
- camera.position.set(START_PLAIN.x+43,START_PLAIN.z+70,START_PLAIN.z+63);
+ camera.position.set(START_PLAIN.x+43,70,START_PLAIN.z+63);
  controls.update();
  setInteractionMode("move");
  activeTool=null;
