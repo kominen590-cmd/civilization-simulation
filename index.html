@@ -34,6 +34,14 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 #message{position:fixed;z-index:12;left:50%;top:50%;transform:translate(-50%,-50%);background:#17251cf2;border:1px solid #9bb58d;border-radius:10px;padding:10px 14px;font-size:12px;max-width:85vw;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none}
 #message.show{opacity:1}
 #inspect{font-size:11px;color:#d7e5d4;margin-top:6px;min-height:15px}
+#goalPanel{position:fixed;z-index:7;left:10px;top:108px;width:min(260px,48vw);max-height:24dvh;overflow:auto;padding:9px 11px;border:1px solid #718b70;border-radius:11px;background:#17251ced;color:#fff;pointer-events:none;box-shadow:0 4px 14px #0003}
+#goalPanel h3{font-size:12px;margin:0 0 5px;display:flex;justify-content:space-between;gap:8px}
+#goalProgress{font-size:10px;color:#d5e4d0;white-space:nowrap}
+#goalList{display:grid;gap:4px}
+.goalItem{display:flex;gap:6px;align-items:flex-start;font-size:10px;line-height:1.35;color:#d5dfd2}
+.goalMark{flex:none;width:14px;height:14px;border:1px solid #9eaf99;border-radius:4px;text-align:center;line-height:12px;font-size:10px}
+.goalItem.done{color:#9fcea0}.goalItem.done .goalMark{background:#416b42;border-color:#8cbd85;color:#fff}
+#goalNote{font-size:9px;color:#9eaf9b;margin-top:5px}
 #savePanel{display:flex;gap:5px;margin-top:7px}
 #savePanel button{flex:1}
 @media(max-width:520px){
@@ -43,6 +51,8 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
  #stats{min-width:142px;padding:6px;gap:3px}
  .stat{font-size:9px}.stat b{font-size:11px}
  #bottomPanel{max-height:31vh}
+ #goalPanel{left:7px;top:96px;width:min(190px,49vw);max-height:22dvh;padding:7px 8px}
+ .goalItem{font-size:9px}
 }
 
 #titleScreen{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#17202d;color:#fff}
@@ -136,8 +146,9 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
   <p>世界が完成しました。あなたの文明は住民5人の小さな集落から始まります。最初の居住地は、建設しやすい広大で平坦な草原です。</p>
   <ul>
    <li>住居と小さな農場が最初から建っています。</li>
-   <li>建設メニューから建物を選び、地面をタップして配置できます。</li>
-   <li>食料・木材・石材と住民の働き手を確認しながら発展させましょう。</li>
+   <li>移動モードと選択モードを切り替え、選択モードではマスの地形や建物を確認できます。</li>
+   <li>建設メニューから建物を選び、移動モードで地面をタップして配置できます。</li>
+   <li>画面左側の「最初の集落」の目標を参考に、土地の確認・住居・伐採所・人口増加を進めましょう。</li>
    <li>時間は停止中です。準備ができたら右上の「時間を再開」を押してください。</li>
   </ul>
   <button class="titleButton" id="closeStartBriefing">集落を確認する</button>
@@ -163,6 +174,11 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
   <button class="uiBtn" id="pauseBtn">Ⅱ 一時停止</button>
   <button class="uiBtn" id="saveBtn">保存</button>
  </div>
+</div>
+<div id="goalPanel" aria-live="polite">
+ <h3><span>最初の集落</span><span id="goalProgress">0 / 4</span></h3>
+ <div id="goalList"></div>
+ <div id="goalNote">目標は自由に無視して発展できます。</div>
 </div>
 <div id="bottomPanel">
  <div id="buildHeader"><b>建設メニュー</b><span id="selectedTool">配置する建物を選択</span></div>
@@ -742,16 +758,23 @@ function footprintTerrainValid(type,x,z){
 }
 const gameState={
  day:1,year:1,season:0,paused:false,elapsed:0,
+ firstCellSelected:false,
  population:5,money:120,food:80,wood:35,stone:15,
  housing:8,workers:4,employed:0,happiness:55,buildings:[],selected:null,
  nextId:1,foodProduced:0,woodProduced:0,stoneProduced:0,
  research:0,era:0,lastGrowth:0
 };
+const START_GOALS=[
+ {id:"survey",title:"周囲の土地を確認する",done:()=>gameState.firstCellSelected},
+ {id:"housing",title:"住居をもう1軒建てる",done:()=>gameState.buildings.filter(b=>b.type==="hut").length>=2},
+ {id:"wood",title:"伐採所を建てる",done:()=>gameState.buildings.some(b=>b.type==="woodcutter")},
+ {id:"growth",title:"人口を6人以上に増やす",done:()=>gameState.population>=6}
+];
 const seasons=["春","夏","秋","冬"];
 const eras=["原始時代","農耕時代","金属時代","中世時代","産業時代","近代","先進時代"];
 const buildingTypes={
  hut:{name:"住居",cost:{wood:12,stone:0,money:8},size:1,capacity:5,color:0xb88b5c,desc:"人口の住まい。定員+5。"},
- farm:{name:"農地",cost:{wood:5,stone:0,money:5},size:2,food:3,color:0x9b9a48,desc:"5日ごとに食料を生産。"},
+ farm:{name:"農地",cost:{wood:5,stone:0,money:5},size:2,food:6,color:0x9b9a48,desc:"5日ごとに食料を生産。"},
  woodcutter:{name:"伐採所",cost:{wood:8,stone:0,money:8},size:1,wood:2,color:0x795438,desc:"森林が近いと木材を生産。"},
  quarry:{name:"採石場",cost:{wood:8,stone:3,money:12},size:2,stone:1,color:0x85877e,desc:"石材を少しずつ採掘。"},
  store:{name:"倉庫",cost:{wood:15,stone:3,money:15},size:2,storage:100,color:0x9b754c,desc:"資源の保管上限を拡張。"},
@@ -822,6 +845,17 @@ function updateHUD(){
  document.getElementById("pauseBtn").textContent=gameState.paused?"▶ 再開":"Ⅱ 一時停止";
  document.getElementById("status").textContent=
   "建物 "+gameState.buildings.length+"棟 / 労働力 "+gameState.workers+"人";
+ updateStartGoals();
+}
+function updateStartGoals(){
+ const list=document.getElementById("goalList");
+ if(!list)return;
+ const completed=START_GOALS.filter(goal=>goal.done()).length;
+ document.getElementById("goalProgress").textContent=completed+" / "+START_GOALS.length;
+ list.innerHTML=START_GOALS.map(goal=>{
+  const done=goal.done();
+  return '<div class="goalItem'+(done?" done":"")+'"><span class="goalMark">'+(done?"✓":"")+"</span><span>"+goal.title+"</span></div>";
+ }).join("");
 }
 function buildMenu(){
  const root=document.getElementById("buildButtons");
@@ -949,6 +983,7 @@ function loadGameData(data){
  const s=data.state;
  const numeric=["day","year","season","population","money","food","wood","stone","housing","workers","employed","happiness","nextId","era","elapsed","research","lastGrowth","foodProduced","woodProduced","stoneProduced"];
  numeric.forEach(k=>{if(Number.isFinite(Number(s[k])))gameState[k]=Number(s[k]);});
+ gameState.firstCellSelected=!!s.firstCellSelected;
  gameState.buildings=Array.isArray(s.buildings)?s.buildings.filter(b=>buildingTypes[b.type]&&Number.isFinite(b.x)&&Number.isFinite(b.z)): [];
  gameState.paused=!!s.paused;
  restoreBuildings();updateHUD();
@@ -959,6 +994,7 @@ function loadGameData(data){
 }
 function initializeNewGame(){
  gameState.day=1;gameState.year=1;gameState.season=0;gameState.paused=true;gameState.elapsed=0;
+ gameState.firstCellSelected=false;
  gameState.population=5;gameState.money=120;gameState.food=80;gameState.wood=35;gameState.stone=15;
  gameState.housing=8;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.buildings=[];gameState.selected=null;
  gameState.nextId=1;gameState.foodProduced=0;gameState.woodProduced=0;gameState.stoneProduced=0;
@@ -999,7 +1035,7 @@ function advanceDay(){
  const labor=allocateLabor();
  const capacity=settlementCapacity();
  if(gameState.day%5===0){
-  const produced=Math.floor(farms*3*labor.farm);
+  const produced=Math.floor(farms*6*labor.farm);
   gameState.food=Math.min(capacity,gameState.food+produced);
   gameState.foodProduced+=produced;
  }
@@ -1105,6 +1141,7 @@ function selectLogicalCell(hit){
  const key=ix+","+iz;
  const building=gameState.buildings.find(b=>footprintCellKeys(b.type,b.x,b.z).includes(key));
  selectedCell={ix,iz};
+ gameState.firstCellSelected=true;
  if(selectedCellOutline){scene.remove(selectedCellOutline);selectedCellOutline.geometry.dispose();selectedCellOutline.material.dispose();}
  const x0=GRID_ORIGIN+ix*CELL,z0=GRID_ORIGIN+iz*CELL,x1=x0+CELL,z1=z0+CELL;
  const corners=[[x0,z0],[x1,z0],[x1,z1],[x0,z1]],points=[];
@@ -1117,6 +1154,8 @@ function selectLogicalCell(hit){
  const material=new THREE.LineBasicMaterial({color:0xffc94f,depthTest:false,transparent:true,opacity:1});
  selectedCellOutline=new THREE.LineSegments(geometry,material);
  selectedCellOutline.renderOrder=21;scene.add(selectedCellOutline);
+ updateStartGoals();
+ saveGame(false);
  const terrainNames={plain:"平地",forest:"森林",hill:"丘陵",mountain:"山地",beach:"海岸",river:"川",lake:"湖",snow:"雪原",sea:"海"};
  document.getElementById("inspect").textContent=
   "選択マス ("+(ix+1)+", "+(iz+1)+") / 地形："+(terrainNames[terrain.kind]||terrain.kind||"不明")+
