@@ -26,6 +26,8 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 #timeControls{display:flex;gap:5px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end}
 .uiBtn,.buildBtn{border:1px solid #718b70;background:#263d2b;color:#fff;border-radius:8px;padding:8px 10px;font-size:12px;min-height:36px}
 .uiBtn:active,.buildBtn:active,.buildBtn.active{background:#54784b}
+.buildBtn.recommended{border:2px solid #f2d27a;background:linear-gradient(180deg,#536b3d,#314b2c);box-shadow:0 0 0 2px #f2d27a44}
+.buildBtn.recommended::after{content:"おすすめ";display:block;color:#ffe5a0;font-size:9px;margin-top:3px}
 #bottomPanel{position:fixed;z-index:9;left:8px;right:8px;bottom:8px;background:#17251cf2;border:1px solid #61755d;border-radius:13px;padding:8px;max-height:34vh;overflow:auto;pointer-events:auto}
 #buildHeader{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:7px;font-size:12px}
 #buildButtons{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
@@ -872,11 +874,16 @@ function updateStartGoals(announce=true){
 function updateFirstBuildHint(){
  const hint=document.getElementById("firstBuildHint");
  if(!hint)return;
- if(gameState.buildings.length<=2){
-  hint.textContent=activeTool
-   ?"配置中："+buildingTypes[activeTool].name+"。緑色のマスをタップすると建設できます。"
-   :"最初の建設：下の建物を選び、緑色の配置マスをタップしましょう。";
+ const firstPlacement=gameState.buildings.length<=2;
+ const recommended=document.querySelector('.buildBtn[data-type="hut"]');
+ if(recommended)recommended.classList.toggle("recommended",firstPlacement&&!activeTool);
+ if(firstPlacement){
   hint.style.display="block";
+  if(activeTool){
+   hint.textContent="配置中："+buildingTypes[activeTool].name+"。緑色のマスは建設可能、赤色は建設不可です。配置したい場所をタップしてください。";
+  }else{
+   hint.textContent="最初の建設：おすすめの「住居」を選び、緑色の配置マスをタップしましょう。住居を増やすと人口の上限が広がります。";
+  }
  }else{
   hint.style.display="none";
  }
@@ -977,7 +984,7 @@ function placeBuilding(type,x,z){
  allocateLabor();
  document.getElementById("inspect").textContent=b.name+"を建設した。";
  updateHUD();saveGame(false);
- if(firstPlayerBuilding&&type!=="hut"&&type!=="woodcutter")showMessage("最初の建物が完成しました！",2400);
+ if(firstPlayerBuilding)showMessage("最初の建物が完成しました！ 緑色のマスを確認しながら、次の建設も進められます。",2600);
 }
 function removeAllBuildings(){
  buildingGroup.clear();buildingMeshes.clear();
@@ -1031,7 +1038,8 @@ function initializeNewGame(){
  gameState.buildings=[{id:gameState.nextId++,type:"hut",x:-58,z:-22,builtDay:1},{id:gameState.nextId++,type:"farm",x:-24,z:-32,builtDay:1}];
  restoreBuildings();
  controls.target.set(START_PLAIN.x,0,START_PLAIN.z);
- camera.position.set(START_PLAIN.x+43,70,START_PLAIN.z+63);
+ const startDistance=innerWidth/innerHeight<0.8?112:104;
+ camera.position.set(START_PLAIN.x+startDistance*0.42,startDistance*0.72,START_PLAIN.z+startDistance*0.62);
  controls.update();
  setInteractionMode("move");
  activeTool=null;
