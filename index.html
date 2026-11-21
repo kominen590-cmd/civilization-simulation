@@ -1249,7 +1249,8 @@ function loadGameData(data){
  const numeric=["day","year","season","population","money","food","wood","stone","housing","workers","employed","happiness","nextId","era","elapsed","research","lastGrowth","foodProduced","woodProduced","stoneProduced"];
  numeric.forEach(k=>{if(Number.isFinite(Number(s[k])))gameState[k]=Number(s[k]);});
  gameState.workforceByType=s.workforceByType&&typeof s.workforceByType==="object"?s.workforceByType:{farm:0,woodcutter:0,quarry:0,well:0};
- gameState.lastDailyReport=s.lastDailyReport&&typeof s.lastDailyReport==="object"?s.lastDailyReport:null;
+ const report=s.lastDailyReport;
+ gameState.lastDailyReport=report&&typeof report==="object"&&["day","year","season","foodProduced","foodConsumed","woodProduced","stoneProduced","moneyDelta"].every(key=>Number.isFinite(Number(report[key])))?{day:Number(report.day),year:Number(report.year),season:THREE.MathUtils.clamp(Math.floor(Number(report.season)),0,3),foodProduced:Number(report.foodProduced),foodConsumed:Number(report.foodConsumed),woodProduced:Number(report.woodProduced),stoneProduced:Number(report.stoneProduced),moneyDelta:Number(report.moneyDelta)}:null;
  gameState.firstCellSelected=!!s.firstCellSelected;
  gameState.completedStartGoals=Array.isArray(s.completedStartGoals)?s.completedStartGoals.filter(id=>START_GOALS.some(g=>g.id===id)):[];
  gameState.exploredCells=Array.isArray(s.exploredCells)?s.exploredCells.filter(key=>/^\d+,\d+$/.test(key)):[];
