@@ -749,12 +749,17 @@ function footprintCellKeys(type,x,z){
  }
  return keys;
 }
+function isCellExplored(ix,iz){
+ return Array.isArray(gameState.exploredCells)&&gameState.exploredCells.includes(ix+","+iz);
+}
 function footprintTerrainValid(type,x,z){
  const size=buildingTypes[type]?.size||1;
  const a=cellAnchor(type,x,z);
  if(a.x<0||a.z<0||a.x+size>GRID_CELLS||a.z+size>GRID_CELLS)return false;
  for(let dz=0;dz<size;dz++)for(let dx=0;dx<size;dx++){
-  const p=cellWorldCenter("hut",a.x+dx,a.z+dz);
+  const ix=a.x+dx,iz=a.z+dz;
+  if(!isCellExplored(ix,iz))return false;
+  const p=cellWorldCenter("hut",ix,iz);
   const d=terrainData(p.x,p.z);
   if(!d.land||["river","lake","snow","mountain"].includes(d.kind))return false;
  }
@@ -762,12 +767,89 @@ function footprintTerrainValid(type,x,z){
 }
 const gameState={
  day:1,year:1,season:0,paused:false,elapsed:0,
- firstCellSelected:false,completedStartGoals:[],
+ firstCellSelected:false,completedStartGoals:[],exploredCells:[],
  population:5,money:120,food:80,wood:35,stone:15,
  housing:8,workers:4,employed:0,happiness:55,buildings:[],selected:null,
  nextId:1,foodProduced:0,woodProduced:0,stoneProduced:0,
  research:0,era:0,lastGrowth:0
 };
+let fogMesh=null;
+const EXPLORATION_RADIUS=3;
+function resetInitialExploration(){
+ const found=new Set();
+ for(let iz=0;iz<GRID_CELLS;iz++)for(let ix=0;ix<GRID_CELLS;ix++){
+  const p=cellWorldCenter("hut",ix,iz);
+  if(isStartingPlain(p.x,p.z))found.add(ix+","+iz);
+ }
+ gameState.exploredCells=[...found];
+}
+function updateFogMesh(){
+ if(fogMesh){
+  scene.remove(fogMesh);
+  fogMesh.geometry.dispose();
+  fogMesh.material.dispose();
+  fogMesh=null;
+ }
+ const positions=[];
+ for(let iz=0;iz<GRID_CELLS;iz++)for(let ix=0;ix<GRID_CELLS;ix++){
+  if(isCellExplored(ix,iz))continue;
+  const center=cellWorldCenter("hut",ix,iz);
+  const data=terrainData(center.x,center.z);
+  if(!data.land)continue;
+  const x0=GRID_ORIGIN+ix*CELL,z0=GRID_ORIGIN+iz*CELL;
+  const x1=x0+CELL,z1=z0+CELL;
+  const lift=5.2;
+  const corners=[
+   [x0,z0,terrainData(x0,z0).height+lift],
+   [x1,z0,terrainData(x1,z0).height+lift],
+   [x1,z1,terrainData(x1,z1).height+lift],
+   [x0,z1,terrainData(x0,z1).height+lift]
+  ];
+  const tris=[0,1,2,0,2,3];
+  for(const i of tris)positions.push(corners[i][0],corners[i][2],corners[i][1]);
+ }
+ if(!positions.length)return;
+ const geometry=new THREE.BufferGeometry();
+ geometry.setAttribute("position",new THREE.Float32BufferAttribute(positions,3));
+ geometry.computeVertexNormals();
+ const material=new THREE.MeshBasicMaterial({
+  color:0x647487,transparent:true,opacity:0.94,
+  depthWrite:true,side:THREE.DoubleSide
+ });
+ fogMesh=new THREE.Mesh(geometry,material);
+ fogMesh.renderOrder=5;
+ scene.add(fogMesh);
+}
+function revealAroundCamera(){
+ const cx=worldToCell(controls.target.x),cz=worldToCell(controls.target.z);
+ const next=new Set(gameState.exploredCells||[]);
+ let changed=false;
+ for(let dz=-EXPLORATION_RADIUS;dz<=EXPLORATION_RADIUS;dz++){
+  for(let dx=-EXPLORATION_RADIUS;dx<=EXPLORATION_RADIUS;dx++){
+   if(dx*dx+dz*dz>EXPLORATION_RADIUS*EXPLORATION_RADIUS)continue;
+   const ix=cx+dx,iz=cz+dz;
+   if(ix<0||iz<0||ix>=GRID_CELLS||iz>=GRID_CELLS)continue;
+   const p=cellWorldCenter("hut",ix,iz);
+   if(!terrainData(p.x,p.z).land)continue;
+   const key=ix+","+iz;
+   if(!next.has(key)){next.add(key);changed=true;}
+  }
+ }
+ if(changed){
+  gameState.exploredCells=[...next];
+  updateFogMesh();
+  saveGame(false);
+ }
+}
+function clampCameraToWorld(){
+ const limit=HALF-2;
+ const oldX=camera.position.x,oldZ=camera.position.z;
+ camera.position.x=THREE.MathUtils.clamp(oldX,-limit,limit);
+ camera.position.z=THREE.MathUtils.clamp(oldZ,-limit,limit);
+ const shiftX=camera.position.x-oldX,shiftZ=camera.position.z-oldZ;
+ controls.target.x=THREE.MathUtils.clamp(controls.target.x+shiftX,-limit,limit);
+ controls.target.z=THREE.MathUtils.clamp(controls.target.z+shiftZ,-limit,limit);
+}
 const START_GOALS=[
  {id:"survey",title:"周囲の土地を確認する",done:()=>gameState.firstCellSelected},
  {id:"housing",title:"住居をもう1軒建てる",done:()=>gameState.buildings.filter(b=>b.type==="hut").length>=2},
@@ -1020,6 +1102,7 @@ function loadGameData(data){
  numeric.forEach(k=>{if(Number.isFinite(Number(s[k])))gameState[k]=Number(s[k]);});
  gameState.firstCellSelected=!!s.firstCellSelected;
  gameState.completedStartGoals=Array.isArray(s.completedStartGoals)?s.completedStartGoals.filter(id=>START_GOALS.some(g=>g.id===id)):[];
+ gameState.exploredCells=Array.isArray(s.exploredCells)?s.exploredCells.filter(key=>/^\\d+,\\d+$/.test(key)):[];
  gameState.buildings=Array.isArray(s.buildings)?s.buildings.filter(b=>buildingTypes[b.type]&&Number.isFinite(b.x)&&Number.isFinite(b.z)): [];
  gameState.paused=!!s.paused;
  restoreBuildings();updateHUD(false);
@@ -1027,16 +1110,19 @@ function loadGameData(data){
   if(Array.isArray(data.camera.position))camera.position.fromArray(data.camera.position);
   if(Array.isArray(data.camera.target))controls.target.fromArray(data.camera.target);
  }
+ if(!gameState.exploredCells.length)resetInitialExploration();
+ updateFogMesh();
 }
 function initializeNewGame(){
  gameState.day=1;gameState.year=1;gameState.season=0;gameState.paused=true;gameState.elapsed=0;
- gameState.firstCellSelected=false;gameState.completedStartGoals=[];
+ gameState.firstCellSelected=false;gameState.completedStartGoals=[];gameState.exploredCells=[];
  gameState.population=5;gameState.money=120;gameState.food=80;gameState.wood=35;gameState.stone=15;
  gameState.housing=8;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.buildings=[];gameState.selected=null;
  gameState.nextId=1;gameState.foodProduced=0;gameState.woodProduced=0;gameState.stoneProduced=0;
  gameState.research=0;gameState.era=0;gameState.lastGrowth=0;
  gameState.buildings=[{id:gameState.nextId++,type:"hut",x:-58,z:-22,builtDay:1},{id:gameState.nextId++,type:"farm",x:-24,z:-32,builtDay:1}];
  restoreBuildings();
+ resetInitialExploration();updateFogMesh();
  controls.target.set(START_PLAIN.x,0,START_PLAIN.z);
  const startDistance=innerWidth/innerHeight<0.8?112:104;
  camera.position.set(START_PLAIN.x+startDistance*0.42,startDistance*0.72,START_PLAIN.z+startDistance*0.62);
@@ -1179,6 +1265,7 @@ renderer.domElement.addEventListener("pointerleave",()=>{
 });
 function selectLogicalCell(hit){
  const ix=worldToCell(hit.point.x),iz=worldToCell(hit.point.z);
+ if(!isCellExplored(ix,iz)){document.getElementById("inspect").textContent="未開拓地です。移動モードでカメラを近づけて探索してください。";return;}
  const center=cellWorldCenter("hut",ix,iz);
  const terrain=terrainData(center.x,center.z);
  const key=ix+","+iz;
@@ -1422,6 +1509,8 @@ function animate(now=0){
   if(cloud.position.x>155)cloud.position.x=-155;
  }
  controls.update();
+ clampCameraToWorld();
+ revealAroundCamera();
  renderer.render(scene,camera);
 }
 animate();
