@@ -108,7 +108,7 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
    <section id="howToScreen" class="titleSubscreen">
     <h2>遊び方</h2>
     <p class="titleNote">画面をドラッグしてカメラを回転し、2本指で操作して視点を調整します。建設メニューから建物を選び、地面をタップすると配置できます。</p>
-    <p class="titleNote">住居は人口の上限を増やし、農地は食料、伐採所は木材、採石場は石材を生産します。住民を支える資源を確保しながら集落を発展させましょう。</p>
+    <p class="titleNote">住居は人口の上限を増やします。農地・伐採所・採石場などは働き手を必要とし、働き手が足りないと生産量が下がります。住民の食料を確保し、井戸や広場で暮らしやすさを高めながら集落を発展させましょう。</p>
     <p class="titleNote">右上の時間ボタンで一時停止・再開ができます。セーブボタンで保存し、タイトル画面の「つづきから」から再開できます。設定・その他からバックアップの書き出しと読み込みも行えます。</p>
     <div class="titleActions single"><button class="titleButton secondary" id="howToBack">戻る</button></div>
    </section>
@@ -841,6 +841,7 @@ function placeBuilding(type,x,z){
  mesh.userData.buildingId=item.id;
  buildingGroup.add(mesh);buildingMeshes.set(item.id,mesh);
  if(b.capacity)gameState.housing+=b.capacity;
+ allocateLabor();
  document.getElementById("inspect").textContent=b.name+"を建設した。";
  updateHUD();saveGame(false);
 }
@@ -856,6 +857,7 @@ function restoreBuildings(){
   buildingGroup.add(mesh);buildingMeshes.set(item.id,mesh);
   if(buildingTypes[item.type].capacity)gameState.housing+=buildingTypes[item.type].capacity;
  }
+ allocateLabor();
 }
 function saveGame(notify=true){
  const data={version:6,seed:SEED,state:gameState,camera:{
