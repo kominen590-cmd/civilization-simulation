@@ -874,6 +874,14 @@ let gameStarted=false;
 const buildingMeshes=new Map();
 const buildingGroup=new THREE.Group();
 scene.add(buildingGroup);
+const residentGroup=new THREE.Group();
+scene.add(residentGroup);
+const residentAgents=[];
+const residentBodyGeometry=new THREE.CylinderGeometry(0.25,0.3,0.9,7);
+const residentHeadGeometry=new THREE.SphereGeometry(0.23,8,6);
+const residentLegGeometry=new THREE.CylinderGeometry(0.09,0.1,0.48,5);
+const residentArmGeometry=new THREE.CylinderGeometry(0.075,0.09,0.55,5);
+const residentColors=[0x527b9b,0x9b6847,0x718b55,0x8b719d,0xb08a45,0x547f78];
 let activeTool=null;
 let interactionMode="move"; // move: camera/build, select: choose a logical cell
 let selectedCell=null;
@@ -955,7 +963,7 @@ function updateHUD(announceGoals=true){
  document.getElementById("storageValue").textContent=settlementCapacity();
  document.getElementById("pauseBtn").textContent=gameState.paused?"▶ 再開":"Ⅱ 一時停止";
  document.getElementById("status").textContent=
-  "建物 "+gameState.buildings.length+"棟 / 労働力 "+gameState.workers+"人";
+  "住民 "+gameState.population+"人 / 就業 "+gameState.employed+"人 / 建物 "+gameState.buildings.length+"棟";
  updateStartGoals(announceGoals);
  updateFirstBuildHint();
 }
@@ -1089,6 +1097,7 @@ function placeBuilding(type,x,z){
  buildingGroup.add(mesh);buildingMeshes.set(item.id,mesh);
  if(b.capacity)gameState.housing+=b.capacity;
  allocateLabor();
+ syncResidentVisuals();
  document.getElementById("inspect").textContent=b.name+"を建設した。";
  updateHUD();saveGame(false);
  if(firstPlayerBuilding)showMessage("最初の建物が完成しました！ 緑色のマスを確認しながら、次の建設も進められます。",2600);
@@ -1109,6 +1118,69 @@ function restoreBuildings(){
   if(buildingTypes[item.type].capacity)gameState.housing+=buildingTypes[item.type].capacity;
  }
  allocateLabor();
+ syncResidentVisuals();
+}
+function residentWorkSlots(){
+ const slots=[];
+ const order=["farm","woodcutter","quarry","well"];
+ order.forEach(type=>{
+  const count=Math.max(0,Math.floor(gameState.workforceByType?.[type]||0));
+  const workplaces=gameState.buildings.filter(b=>b.type===type);
+  for(let i=0;i<count;i++)if(workplaces.length)slots.push({type,building:workplaces[i%workplaces.length]});
+ });
+ return slots;
+}
+function syncResidentVisuals(){
+ residentGroup.clear();residentAgents.length=0;
+ const homes=gameState.buildings.filter(b=>b.type==="hut");
+ const home=homes[0]||{x:START_PLAIN.x,z:START_PLAIN.z};
+ const slots=residentWorkSlots();
+ const visibleCount=Math.min(Math.max(0,Math.floor(gameState.population||0)),40);
+ for(let i=0;i<visibleCount;i++){
+  const group=new THREE.Group();
+  const material=new THREE.MeshStandardMaterial({color:residentColors[i%residentColors.length],roughness:0.9});
+  const skin=new THREE.MeshStandardMaterial({color:i%3===0?0xc99468:0xd8aa7d,roughness:0.95});
+  const dark=new THREE.MeshStandardMaterial({color:0x443a32,roughness:1});
+  const body=new THREE.Mesh(residentBodyGeometry,material);body.position.y=1.0;group.add(body);
+  const head=new THREE.Mesh(residentHeadGeometry,skin);head.position.y=1.62;group.add(head);
+  const leftLeg=new THREE.Mesh(residentLegGeometry,dark);leftLeg.position.set(-0.13,0.31,0);group.add(leftLeg);
+  const rightLeg=new THREE.Mesh(residentLegGeometry,dark);rightLeg.position.set(0.13,0.31,0);group.add(rightLeg);
+  const leftArm=new THREE.Mesh(residentArmGeometry,material);leftArm.position.set(-0.31,1.02,0);leftArm.rotation.z=0.18;group.add(leftArm);
+  const rightArm=new THREE.Mesh(residentArmGeometry,material);rightArm.position.set(0.31,1.02,0);rightArm.rotation.z=-0.18;group.add(rightArm);
+  const homeAngle=i*2.399;
+  const homePoint={x:home.x+Math.cos(homeAngle)*(1.5+(i%3)*0.45),z:home.z+Math.sin(homeAngle)*(1.5+(i%3)*0.45)};
+  const slot=slots[i]||null;
+  const workplace=slot?slot.building:null;
+  const workAngle=i*2.399+Math.PI;
+  const workPoint=workplace?{x:workplace.x+Math.cos(workAngle)*1.7,z:workplace.z+Math.sin(workAngle)*1.7}:{x:home.x+Math.cos(workAngle)*3.2,z:home.z+Math.sin(workAngle)*3.2};
+  group.position.set(homePoint.x,terrainData(homePoint.x,homePoint.z).height,homePoint.z);
+  group.scale.setScalar(0.82);
+  group.userData={homePoint,workPoint,atWork:false,clock:i*2.7,walkPhase:i*0.8,job:slot?.type||"idle"};
+  residentGroup.add(group);residentAgents.push(group);
+ }
+}
+function updateResidentLife(delta){
+ if(!gameStarted||gameState.paused||!residentAgents.length)return;
+ for(const person of residentAgents){
+  const data=person.userData;
+  data.clock+=delta;
+  if(data.clock>=18){data.clock-=18;data.atWork=!data.atWork;}
+  const target=data.atWork?data.workPoint:data.homePoint;
+  const dx=target.x-person.position.x,dz=target.z-person.position.z;
+  const distance=Math.hypot(dx,dz);
+  const moving=distance>0.22;
+  if(moving){
+   const step=Math.min(distance,1.45*delta);
+   person.position.x+=dx/distance*step;
+   person.position.z+=dz/distance*step;
+   person.rotation.y=Math.atan2(dx,dz);
+  }
+  data.walkPhase+=delta*(moving?9:2.5);
+  const swing=moving?Math.sin(data.walkPhase)*0.42:Math.sin(data.walkPhase)*0.035;
+  person.children[2].rotation.x=swing;person.children[3].rotation.x=-swing;
+  person.children[4].rotation.x=-swing*0.65;person.children[5].rotation.x=swing*0.65;
+  person.position.y=terrainData(person.position.x,person.position.z).height+(moving?Math.abs(Math.sin(data.walkPhase))*0.06:0);
+ }
 }
 function saveGame(notify=true){
  const data={version:6,seed:SEED,state:gameState,camera:{
@@ -1178,6 +1250,7 @@ function loadGame(){
  }catch(e){showMessage("セーブデータを読み込めませんでした");}
 }
 function advanceDay(){
+ const populationBefore=gameState.population;
  gameState.day++;
  if(gameState.day>30){
   gameState.day=1;gameState.season++;
@@ -1220,6 +1293,7 @@ function advanceDay(){
   gameState.population++;
  }
  allocateLabor();
+ if(gameState.population!==populationBefore)syncResidentVisuals();
  if(gameState.population>=20&&gameState.era<1)gameState.era=1;
  if(gameState.population>=60&&gameState.era<2&&gameState.wood>=40)gameState.era=2;
  if(gameState.population>=150&&gameState.era<3&&gameState.stone>=100)gameState.era=3;
@@ -1561,6 +1635,7 @@ function animate(now=0){
  }
  controls.update();
  clampCameraToWorld();
+ updateResidentLife(delta);
  revealAroundCamera();
  renderer.render(scene,camera);
 }
