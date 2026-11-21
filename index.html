@@ -1102,7 +1102,7 @@ function loadGameData(data){
  numeric.forEach(k=>{if(Number.isFinite(Number(s[k])))gameState[k]=Number(s[k]);});
  gameState.firstCellSelected=!!s.firstCellSelected;
  gameState.completedStartGoals=Array.isArray(s.completedStartGoals)?s.completedStartGoals.filter(id=>START_GOALS.some(g=>g.id===id)):[];
- gameState.exploredCells=Array.isArray(s.exploredCells)?s.exploredCells.filter(key=>/^\\d+,\\d+$/.test(key)):[];
+ gameState.exploredCells=Array.isArray(s.exploredCells)?s.exploredCells.filter(key=>/^\d+,\d+$/.test(key)):[];
  gameState.buildings=Array.isArray(s.buildings)?s.buildings.filter(b=>buildingTypes[b.type]&&Number.isFinite(b.x)&&Number.isFinite(b.z)): [];
  gameState.paused=!!s.paused;
  restoreBuildings();updateHUD(false);
@@ -1300,8 +1300,8 @@ function setInteractionMode(mode){
  button.textContent=interactionMode==="move"?"移動モード":"選択モード";
  button.setAttribute("aria-pressed",String(interactionMode==="select"));
  document.getElementById("help").textContent=interactionMode==="move"
-  ?"移動モード：ドラッグで視点操作 / 建物を選んで地面をタップ：建設"
-  :"選択モード：カメラ移動停止 / マスをタップして地形・建物を確認";
+  ?"移動モード：ドラッグで探索 / 進むと霧が晴れます / 建物を選んで地面をタップ：建設"
+  :"選択モード：カメラ移動停止 / 発見済みのマスをタップして地形・建物を確認";
  document.getElementById("inspect").textContent=interactionMode==="move"
   ?"移動モードです。マスを選択するには選択モードに切り替えてください。"
   :"マスをタップして選択してください。カメラは移動しません。";
