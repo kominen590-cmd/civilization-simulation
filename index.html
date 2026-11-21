@@ -133,7 +133,7 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 <div id="startBriefing" aria-modal="true" role="dialog" aria-labelledby="startBriefingTitle">
  <div id="startBriefingCard">
   <h2 id="startBriefingTitle">新しい文明の始まり</h2>
-  <p>世界が完成しました。あなたの文明は住民5人の小さな集落から始まります。</p>
+  <p>世界が完成しました。あなたの文明は住民5人の小さな集落から始まります。最初の居住地は、建設しやすい広大で平坦な草原です。</p>
   <ul>
    <li>住居と小さな農場が最初から建っています。</li>
    <li>建設メニューから建物を選び、地面をタップして配置できます。</li>
@@ -292,6 +292,14 @@ function moistureAt(x,z){
  );
 }
 
+// 最初の居住地：広大で平坦な草原。周辺の世界地形は通常どおり生成する。
+const START_PLAIN={x:-48,z:-18,rx:40,rz:32};
+function isStartingPlain(x,z){
+ const dx=(x-START_PLAIN.x)/START_PLAIN.rx;
+ const dz=(z-START_PLAIN.z)/START_PLAIN.rz;
+ return dx*dx+dz*dz<=1;
+}
+
 // 大陸・島
 const continents=[
  {x:-48,z:-18,rx:59,rz:43},
@@ -315,7 +323,7 @@ function landScore(x,z){
  const detail=(noise(x+100,z-300,8)-0.5)*0.12;
  return best+coastNoise+detail;
 }
-function isLand(x,z){return landScore(x,z)>0.02}
+function isLand(x,z){return isStartingPlain(x,z)||landScore(x,z)>0.02}
 
 // 湖の候補地
 const lakes=[
@@ -338,6 +346,7 @@ function lakeDistance(x,z){
 
 // 地形の基本標高
 function baseHeight(x,z){
+ if(isStartingPlain(x,z))return 0.5;
  const score=landScore(x,z);
  if(score<=0.02)return -1.2;
 
@@ -425,6 +434,7 @@ function riverDistance(x,z){
 }
 
 function terrainData(x,z){
+ if(isStartingPlain(x,z))return {land:true,height:0.5,kind:"plain",moisture:0.55,temperature:0.75};
  const score=landScore(x,z);
  const land=score>0.02;
  if(!land)return {land:false,height:-1.2,kind:"sea"};
@@ -510,7 +520,7 @@ const lakeMaterial=new THREE.MeshStandardMaterial({
  color:0x438eae,roughness:0.28,metalness:0.04
 });
 for(const lake of lakes){
- if(!isLand(lake.x,lake.z))continue;
+ if(!isLand(lake.x,lake.z)||isStartingPlain(lake.x,lake.z))continue;
 
  const mesh=new THREE.Mesh(
   new THREE.CircleGeometry(1,40),lakeMaterial
@@ -534,7 +544,7 @@ for(const curve of riverCurves){
  const segments=[];
  for(let i=0;i<=100;i++){
   const p=curve.getPoint(i/100);
-  if(isLand(p.x,p.z)){
+  if(isLand(p.x,p.z)&&!isStartingPlain(p.x,p.z)){
    const d=terrainData(p.x,p.z);
    segment.push(new THREE.Vector3(p.x,d.height+0.08,p.z));
   }else{
@@ -587,7 +597,7 @@ for(let i=0;i<MAX_TREES;i++){
  const z=(random()-0.5)*WORLD_SIZE;
  const data=terrainData(x,z);
 
- if(!data.land)continue;
+ if(!data.land||isStartingPlain(x,z))continue;
  if(["beach","river","lake","mountain","snow"].includes(data.kind))continue;
 
  const density=forestDensity(x,z);
@@ -637,7 +647,7 @@ for(let i=0;i<MAX_ROCKS*3&&rockCount<MAX_ROCKS;i++){
  const x=(random()-0.5)*WORLD_SIZE;
  const z=(random()-0.5)*WORLD_SIZE;
  const data=terrainData(x,z);
- if(!data.land||data.height<5||["beach","river","lake","snow"].includes(data.kind))continue;
+ if(!data.land||isStartingPlain(x,z)||data.height<5||["beach","river","lake","snow"].includes(data.kind))continue;
  if(random()>0.42)continue;
  const size=0.35+random()*1.15;
  dummy.position.set(x,data.height+size*0.32,z);
