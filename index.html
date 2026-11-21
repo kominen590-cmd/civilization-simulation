@@ -1,0 +1,224 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>文明発展シミュレーション</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #17251c;
+      color: white;
+      font-family: sans-serif;
+      touch-action: none;
+    }
+    #game { width: 100vw; height: 100dvh; }
+    #panel {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: #17251cdd;
+      pointer-events: none;
+    }
+    #panel h2 { margin: 0 0 6px; font-size: 17px; }
+    #panel p { margin: 0; font-size: 12px; color: #d4e2d3; }
+    #help {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #17251ccc;
+      padding: 9px 13px;
+      border-radius: 10px;
+      font-size: 12px;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="panel">
+    <h2>文明発展シミュレーション</h2>
+    <p>開拓前の大地</p>
+    <p>開発試作版 0.1</p>
+  </div>
+  <div id="help">ドラッグ：視点移動　ピンチ：拡大・縮小</div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    const container = document.getElementById("game");
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9bb8c3);
+    scene.fog = new THREE.Fog(0x9bb8c3, 65, 180);
+
+    const camera = new THREE.PerspectiveCamera(
+      45, window.innerWidth / window.innerHeight, 0.1, 500
+    );
+    camera.position.set(32, 32, 42);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: "high-performance"
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = false;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.maxPolarAngle = Math.PI / 2.05;
+    controls.minDistance = 8;
+    controls.maxDistance = 100;
+    controls.target.set(0, 0, 0);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x66734b, 2));
+
+    const sunlight = new THREE.DirectionalLight(0xffffff, 2);
+    sunlight.position.set(-30, 60, 20);
+    scene.add(sunlight);
+
+    // 地形生成
+    const size = 100;
+    const divisions = 100;
+    const geometry = new THREE.PlaneGeometry(
+      size, size, divisions, divisions
+    );
+    geometry.rotateX(-Math.PI / 2);
+
+    const positions = geometry.attributes.position;
+    const colors = [];
+
+    for (let i = 0; i < positions.count; i++) {
+      const x = positions.getX(i);
+      const z = positions.getZ(i);
+
+      const hills =
+        Math.sin(x * 0.12) * 1.5 +
+        Math.cos(z * 0.10) * 1.2 +
+        Math.sin((x + z) * 0.07) * 1.5;
+
+      const distance = Math.abs(z - 10 + Math.sin(x * 0.07) * 3);
+      const river = Math.exp(-Math.pow(distance / 3, 2));
+
+      const height = hills * (1 - river * 0.8);
+      positions.setY(i, height);
+
+      let color;
+      if (river > 0.65) {
+        color = new THREE.Color(0x438da8);
+      } else if (height > 2.5) {
+        color = new THREE.Color(0x879276);
+      } else {
+        color = new THREE.Color(0x648e52);
+      }
+
+      const variation = 0.96 + Math.random() * 0.08;
+      color.multiplyScalar(variation);
+      colors.push(color.r, color.g, color.b);
+    }
+
+    geometry.setAttribute(
+      "color", new THREE.Float32BufferAttribute(colors, 3)
+    );
+    geometry.computeVertexNormals();
+
+    const terrain = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 1
+      })
+    );
+    scene.add(terrain);
+
+    // 遠くの山々
+    const mountainMaterial = new THREE.MeshStandardMaterial({
+      color: 0x65766b,
+      roughness: 1
+    });
+
+    for (let i = 0; i < 18; i++) {
+      const mountain = new THREE.Mesh(
+        new THREE.ConeGeometry(
+          3 + Math.random() * 5,
+          8 + Math.random() * 12,
+          6
+        ),
+        mountainMaterial
+      );
+      mountain.position.set(
+        (Math.random() - 0.5) * 120,
+        5,
+        -55 - Math.random() * 35
+      );
+      scene.add(mountain);
+    }
+
+    // 簡易的な森林
+    const treeMaterial = new THREE.MeshStandardMaterial({
+      color: 0x315b35
+    });
+    const trunkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x705039
+    });
+
+    for (let i = 0; i < 100; i++) {
+      const x = (Math.random() - 0.5) * 90;
+      const z = (Math.random() - 0.5) * 90;
+
+      if (Math.abs(z - 10 + Math.sin(x * 0.07) * 3) < 7) continue;
+
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.22, 1.4, 5),
+        trunkMaterial
+      );
+      trunk.position.set(x, 0.7, z);
+      scene.add(trunk);
+
+      const leaves = new THREE.Mesh(
+        new THREE.ConeGeometry(0.9, 2.8, 6),
+        treeMaterial
+      );
+      leaves.position.set(x, 2.5, z);
+      scene.add(leaves);
+    }
+
+    function resize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    }
+
+    window.addEventListener("resize", resize);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>
