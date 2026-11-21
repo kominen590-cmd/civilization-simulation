@@ -1238,6 +1238,15 @@ let cellPreview=null;
 function clearCellPreview(){
  if(cellPreview){scene.remove(cellPreview);cellPreview.geometry.dispose();cellPreview.material.dispose();cellPreview=null;}
 }
+function buildingPlacementSummary(type,x,z){
+ const b=buildingTypes[type];
+ const cost="必要資源：木"+(b.cost.wood||0)+" / 石"+(b.cost.stone||0)+" / "+b.cost.money+"G";
+ if(type==="hut")return cost+" / 住居定員 +"+(b.capacity||0);
+ if(type==="farm")return cost+" / 食料見込み：約"+Math.floor(6*localFarmPotential(x,z))+"（5日ごと・最大労働時）";
+ if(type==="woodcutter")return cost+" / 木材見込み：約"+Math.floor(2*localForestPotential(x,z))+"（3日ごと・最大労働時）";
+ if(type==="quarry")return cost+" / 石材見込み：約"+(terrainData(x,z).kind==="hill"?1.6:0.65)+"（3日ごと・最大労働時）";
+ return cost+" / "+b.desc;
+}
 function updateCellPreview(event){
  const hit=setPointerRay(event);
  if(!hit){clearCellPreview();if(ghost)ghost.visible=false;return;}
@@ -1246,7 +1255,11 @@ function updateCellPreview(event){
  const p=selecting?{x:hit.point.x,z:hit.point.z}:buildingPositionFromPoint(type,hit.point.x,hit.point.z);
  const a=selecting?{x:worldToCell(hit.point.x),z:worldToCell(hit.point.z)}:cellAnchor(type,p.x,p.z);
  const size=selecting?1:(activeTool?(buildingTypes[type].size||1):1);
- const valid=selecting?true:(activeTool?footprintTerrainValid(type,p.x,p.z)&&footprintFree(type,p.x,p.z):true);
+ const explored=selecting?isCellExplored(a.x,a.z):footprintCellKeys(type,p.x,p.z).every(key=>{const parts=key.split(",").map(Number);return isCellExplored(parts[0],parts[1]);});
+ const terrainValid=selecting?true:footprintTerrainValid(type,p.x,p.z);
+ const free=selecting?true:footprintFree(type,p.x,p.z);
+ const affordable=selecting?true:(gameState.wood>=(buildingTypes[type].cost.wood||0)&&gameState.stone>=(buildingTypes[type].cost.stone||0)&&gameState.money>=buildingTypes[type].cost.money);
+ const valid=selecting?true:(terrainValid&&free&&affordable);
  const points=[];
  const yOffset=0.22;
  for(let dz=0;dz<size;dz++)for(let dx=0;dx<size;dx++){
@@ -1272,6 +1285,10 @@ function updateCellPreview(event){
  cellPreview=new THREE.LineSegments(geometry,material);
  cellPreview.renderOrder=20;
  scene.add(cellPreview);
+ if(activeTool&&!selecting){
+  const status=!explored?"未探索の土地です。先にカメラを移動して発見してください。":!terrainValid?"この地形には建設できません。":!free?"ほかの建物と重なっています。":!affordable?"資源または資金が不足しています。":"配置可能です。 "+buildingPlacementSummary(type,p.x,p.z);
+  document.getElementById("inspect").textContent=status;
+ }
  if(ghost){
   ghost.visible=!selecting&&!!activeTool;
   if(activeTool&&!selecting){
