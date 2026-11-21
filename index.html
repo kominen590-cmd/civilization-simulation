@@ -1048,8 +1048,10 @@ function updateHUD(announceGoals=true){
  document.getElementById("storageValue").textContent=settlementCapacity();
  updateEconomyReport();
  document.getElementById("pauseBtn").textContent=gameState.paused?"▶ 再開":"Ⅱ 一時停止";
+ const atWork=residentAgents.filter(person=>person.userData.job!=="idle"&&person.userData.atWork&&person.userData.pathIndex>=person.userData.path.length).length;
+ const idle=residentAgents.filter(person=>person.userData.job==="idle").length;
  document.getElementById("status").textContent=
-  "住民 "+gameState.population+"人 / 就業 "+gameState.employed+"人 / 建物 "+gameState.buildings.length+"棟";
+  "住民 "+gameState.population+"人 / 就業 "+gameState.employed+"人 / 建物 "+gameState.buildings.length+"棟 / 職場滞在 "+atWork+"人 / 未配置 "+idle+"人";
  updateStartGoals(announceGoals);
  updateFirstBuildHint();
 }
@@ -1278,7 +1280,9 @@ function syncResidentVisuals(){
  }));
  residentGroup.clear();residentAgents.length=0;
  const homes=gameState.buildings.filter(b=>b.type==="hut");
- const home=homes[0]||{x:START_PLAIN.x,z:START_PLAIN.z};
+ const fallbackHome={x:START_PLAIN.x,z:START_PLAIN.z,type:"hut"};
+ const homeAssignments=[];
+ homes.forEach(home=>{for(let n=0;n<(buildingTypes.hut.capacity||5);n++)homeAssignments.push(home);});
  const slots=residentWorkSlots();
  const visibleCount=Math.min(Math.max(0,Math.floor(gameState.population||0)),40);
  for(let i=0;i<visibleCount;i++){
@@ -1292,17 +1296,18 @@ function syncResidentVisuals(){
   const rightLeg=new THREE.Mesh(residentLegGeometry,dark);rightLeg.position.set(0.13,0.31,0);group.add(rightLeg);
   const leftArm=new THREE.Mesh(residentArmGeometry,material);leftArm.position.set(-0.31,1.02,0);leftArm.rotation.z=0.18;group.add(leftArm);
   const rightArm=new THREE.Mesh(residentArmGeometry,material);rightArm.position.set(0.31,1.02,0);rightArm.rotation.z=-0.18;group.add(rightArm);
-  const homeAngle=i*2.399;
-  const homeRadius=(CELL*(buildingTypes.hut.size||1))/2+0.9;
+  const home=homeAssignments[i]||homes[i%Math.max(1,homes.length)]||fallbackHome;
+  const homeAngle=i*2.399+(Math.floor(i/5)*0.37);
+  const homeRadius=(CELL*(buildingTypes.hut.size||1))/2+1.05;
   const homePoint={x:home.x+Math.cos(homeAngle)*homeRadius,z:home.z+Math.sin(homeAngle)*homeRadius};
   const slot=slots[i]||null;
   const workplace=slot?slot.building:null;
   const workAngle=i*2.399+Math.PI;
-  const workRadius=workplace?(CELL*(buildingTypes[workplace.type].size||1))/2+0.9:homeRadius+1.8;
-  const workPoint=workplace?{x:workplace.x+Math.cos(workAngle)*workRadius,z:workplace.z+Math.sin(workAngle)*workRadius}:{x:home.x+Math.cos(workAngle)*workRadius,z:home.z+Math.sin(workAngle)*workRadius};
+  const workRadius=workplace?(CELL*(buildingTypes[workplace.type].size||1))/2+1.05:homeRadius;
+  const workPoint=workplace?{x:workplace.x+Math.cos(workAngle)*workRadius,z:workplace.z+Math.sin(workAngle)*workRadius}:homePoint;
   group.position.set(homePoint.x,terrainData(homePoint.x,homePoint.z).height,homePoint.z);
   group.scale.setScalar(0.82);
-  group.userData={homePoint,workPoint,atWork:false,clock:i*2.7,walkPhase:i*0.8,job:slot?.type||"idle",path:[],pathIndex:0};
+  group.userData={homePoint,workPoint,homeBuildingId:home.id||null,workBuildingId:workplace?.id||null,atWork:false,clock:i*2.7,walkPhase:i*0.8,job:slot?.type||"idle",path:[],pathIndex:0};
   residentGroup.add(group);residentAgents.push(group);
  }
 }
@@ -1313,7 +1318,7 @@ function updateResidentLife(delta){
   data.clock+=delta;
   if(data.clock>=18){
    data.clock=0;
-   if(!setResidentDestination(person,!data.atWork))data.clock=15;
+   if(data.job!=="idle"&&!setResidentDestination(person,!data.atWork))data.clock=15;
   }
   let remaining=1.45*delta,moving=false;
   while(remaining>0&&data.pathIndex<data.path.length){
@@ -1330,7 +1335,8 @@ function updateResidentLife(delta){
   }
   if(data.pathIndex>=data.path.length){data.path=[];data.pathIndex=0;}
   data.walkPhase+=delta*(moving?9:2.5);
-  const swing=moving?Math.sin(data.walkPhase)*0.42:Math.sin(data.walkPhase)*0.035;
+  const idleSway=data.job==="idle"?0.07:0.035;
+  const swing=moving?Math.sin(data.walkPhase)*0.42:Math.sin(data.walkPhase)*idleSway;
   person.children[2].rotation.x=swing;person.children[3].rotation.x=-swing;
   person.children[4].rotation.x=-swing*0.65;person.children[5].rotation.x=swing*0.65;
   person.position.y=terrainData(person.position.x,person.position.z).height+(moving?Math.abs(Math.sin(data.walkPhase))*0.06:0);
