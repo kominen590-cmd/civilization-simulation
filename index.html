@@ -1057,7 +1057,7 @@ renderer.domElement.addEventListener("pointerdown",e=>{
 });
 renderer.domElement.addEventListener("pointermove",e=>{
  if(pointerStart&&Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>7)pointerMoved=true;
- if(!pointerMoved||e.pointerType==="mouse")updateGhostAt(e);
+ updateGhostAt(e);
 });
 renderer.domElement.addEventListener("pointerleave",()=>{
  clearCellPreview();
@@ -1072,6 +1072,7 @@ renderer.domElement.addEventListener("pointerup",e=>{
  if(!hit)return;
  const p=buildingPositionFromPoint(activeTool,hit.point.x,hit.point.z);
  placeBuilding(activeTool,p.x,p.z);
+ if(e.pointerType!=="mouse")clearCellPreview();
 });
 renderer.domElement.addEventListener("pointercancel",()=>{pointerStart=null;pointerMoved=false;});
 document.getElementById("pauseBtn").addEventListener("click",()=>{
