@@ -169,6 +169,7 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
   <div class="stat">木材 / 石材<b id="materialsValue">35 / 15</b></div>
    <div class="stat">住居定員<b id="housingValue">5 / 13人</b></div>
    <div class="stat">就業<b id="employmentValue">0 / 4人</b></div>
+   <div class="stat">仕事の内訳<b id="workDetailValue">農0 伐0 採0 水0</b></div>
    <div class="stat">満足度<b id="happinessValue">55%</b></div>
    <div class="stat">保管上限<b id="storageValue">100</b></div>
  </div>
@@ -767,7 +768,7 @@ function footprintTerrainValid(type,x,z){
  return true;
 }
 const gameState={
- day:1,year:1,season:0,paused:false,elapsed:0,
+ day:1,year:1,season:0,paused:false,elapsed:0,workforceByType:{farm:0,woodcutter:0,quarry:0,well:0},
  firstCellSelected:false,completedStartGoals:[],exploredCells:[],
  population:5,money:120,food:80,wood:35,stone:15,
  housing:8,workers:4,employed:0,happiness:55,buildings:[],selected:null,
@@ -913,8 +914,29 @@ function allocateLabor(){
  const wood=allocate("woodcutter",2);
  const stone=allocate("quarry",2);
  const water=allocate("well",1);
+ gameState.workforceByType={
+  farm:Math.min(gameState.workers,counts.farm*2),
+  woodcutter:Math.min(Math.max(0,gameState.workers-counts.farm*2),counts.woodcutter*2),
+  quarry:Math.min(Math.max(0,gameState.workers-counts.farm*2-counts.woodcutter*2),counts.quarry*2),
+  well:Math.min(Math.max(0,gameState.workers-counts.farm*2-counts.woodcutter*2-counts.quarry*2),counts.well)
+ };
  gameState.employed=gameState.workers-available;
  return {farm,wood,stone,water};
+}
+function localFarmPotential(x,z){
+ const d=terrainData(x,z);
+ let value=1;
+ if(d.kind==="dry")value=0.62;
+ else if(d.kind==="wetland")value=0.88;
+ else if(d.kind==="hill")value=0.78;
+ else if(d.kind==="beach")value=0.45;
+ value*=THREE.MathUtils.clamp(0.82+d.moisture*0.34,0.72,1.12);
+ value*=THREE.MathUtils.clamp(0.82+d.temperature*0.24,0.78,1.04);
+ return THREE.MathUtils.clamp(value,0.45,1.2);
+}
+function localForestPotential(x,z){
+ const density=forestDensity(x,z);
+ return density<0.12?0:THREE.MathUtils.clamp(density*1.8,0,1.5);
 }
 function updateHUD(announceGoals=true){
  document.getElementById("dateValue").textContent=
@@ -927,6 +949,8 @@ function updateHUD(announceGoals=true){
   moneyText(gameState.wood)+" / "+moneyText(gameState.stone);
  document.getElementById("housingValue").textContent=gameState.population+" / "+gameState.housing+"人";
  document.getElementById("employmentValue").textContent=gameState.employed+" / "+gameState.workers+"人";
+ const jobs=gameState.workforceByType||{};
+ document.getElementById("workDetailValue").textContent="農"+(jobs.farm||0)+" 伐"+(jobs.woodcutter||0)+" 採"+(jobs.quarry||0)+" 水"+(jobs.well||0);
  document.getElementById("happinessValue").textContent=Math.round(gameState.happiness)+"%";
  document.getElementById("storageValue").textContent=settlementCapacity();
  document.getElementById("pauseBtn").textContent=gameState.paused?"▶ 再開":"Ⅱ 一時停止";
@@ -1101,6 +1125,7 @@ function loadGameData(data){
  const s=data.state;
  const numeric=["day","year","season","population","money","food","wood","stone","housing","workers","employed","happiness","nextId","era","elapsed","research","lastGrowth","foodProduced","woodProduced","stoneProduced"];
  numeric.forEach(k=>{if(Number.isFinite(Number(s[k])))gameState[k]=Number(s[k]);});
+ gameState.workforceByType=s.workforceByType&&typeof s.workforceByType==="object"?s.workforceByType:{farm:0,woodcutter:0,quarry:0,well:0};
  gameState.firstCellSelected=!!s.firstCellSelected;
  gameState.completedStartGoals=Array.isArray(s.completedStartGoals)?s.completedStartGoals.filter(id=>START_GOALS.some(g=>g.id===id)):[];
  gameState.exploredCells=Array.isArray(s.exploredCells)?s.exploredCells.filter(key=>/^\d+,\d+$/.test(key)):[];
@@ -1119,7 +1144,7 @@ function initializeNewGame(){
  gameState.day=1;gameState.year=1;gameState.season=0;gameState.paused=true;gameState.elapsed=0;
  gameState.firstCellSelected=false;gameState.completedStartGoals=[];gameState.exploredCells=[];
  gameState.population=5;gameState.money=120;gameState.food=80;gameState.wood=35;gameState.stone=15;
- gameState.housing=8;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.buildings=[];gameState.selected=null;
+ gameState.housing=8;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.workforceByType={farm:0,woodcutter:0,quarry:0,well:0};gameState.buildings=[];gameState.selected=null;
  gameState.nextId=1;gameState.foodProduced=0;gameState.woodProduced=0;gameState.stoneProduced=0;
  gameState.research=0;gameState.era=0;gameState.lastGrowth=0;
  gameState.buildings=[{id:gameState.nextId++,type:"hut",x:-58,z:-22,builtDay:1},{id:gameState.nextId++,type:"farm",x:-24,z:-32,builtDay:1}];
@@ -1158,21 +1183,24 @@ function advanceDay(){
   gameState.day=1;gameState.season++;
   if(gameState.season>3){gameState.season=0;gameState.year++;}
  }
- const farms=gameState.buildings.filter(b=>b.type==="farm").length;
- const cutters=gameState.buildings.filter(b=>b.type==="woodcutter").length;
- const quarries=gameState.buildings.filter(b=>b.type==="quarry").length;
+ const farms=gameState.buildings.filter(b=>b.type==="farm");
+ const cutters=gameState.buildings.filter(b=>b.type==="woodcutter");
+ const quarries=gameState.buildings.filter(b=>b.type==="quarry");
  const wells=gameState.buildings.filter(b=>b.type==="well").length;
  const plazas=gameState.buildings.filter(b=>b.type==="plaza").length;
  const labor=allocateLabor();
  const capacity=settlementCapacity();
  if(gameState.day%5===0){
-  const produced=Math.floor(farms*6*labor.farm);
+  const potential=farms.reduce((sum,b)=>sum+6*localFarmPotential(b.x,b.z),0);
+  const produced=Math.floor(potential*labor.farm);
   gameState.food=Math.min(capacity,gameState.food+produced);
   gameState.foodProduced+=produced;
  }
  if(gameState.day%3===0){
-  const produced=Math.floor(cutters*(forestCenters.length?2:1)*labor.wood);
-  const stone=Math.floor(quarries*labor.stone);
+  const woodPotential=cutters.reduce((sum,b)=>sum+2*localForestPotential(b.x,b.z),0);
+  const produced=Math.floor(woodPotential*labor.wood);
+  const stonePotential=quarries.reduce((sum,b)=>sum+(terrainData(b.x,b.z).kind==="hill"?1.6:0.65),0);
+  const stone=Math.floor(stonePotential*labor.stone);
   gameState.wood=Math.min(capacity,gameState.wood+produced);
   gameState.stone=Math.min(capacity,gameState.stone+stone);
   gameState.woodProduced+=produced;gameState.stoneProduced+=stone;
@@ -1289,9 +1317,12 @@ function selectLogicalCell(hit){
  updateStartGoals();
  saveGame(false);
  const terrainNames={plain:"平地",forest:"森林",hill:"丘陵",mountain:"山地",beach:"海岸",river:"川",lake:"湖",snow:"雪原",sea:"海"};
+ const farmSuit=Math.round(localFarmPotential(center.x,center.z)*100);
+ const forestSuit=Math.round(localForestPotential(center.x,center.z)*100);
+ const resourceInfo=" / 農業適性 "+farmSuit+"% / 森林資源 "+forestSuit+"%";
  document.getElementById("inspect").textContent=
   "選択マス ("+(ix+1)+", "+(iz+1)+") / 地形："+(terrainNames[terrain.kind]||terrain.kind||"不明")+
-  " / 建物："+(building?buildingTypes[building.type].name:"なし");
+  resourceInfo+" / 建物："+(building?buildingTypes[building.type].name:"なし");
 }
 function setInteractionMode(mode){
  interactionMode=mode==="select"?"select":"move";
