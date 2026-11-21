@@ -1131,6 +1131,12 @@ function residentWorkSlots(){
  return slots;
 }
 function syncResidentVisuals(){
+ residentGroup.children.forEach(person=>person.traverse(object=>{
+  if(object.isMesh){
+   if(object.material&&!Array.isArray(object.material))object.material.dispose();
+   else if(Array.isArray(object.material))object.material.forEach(material=>material.dispose());
+  }
+ }));
  residentGroup.clear();residentAgents.length=0;
  const homes=gameState.buildings.filter(b=>b.type==="hut");
  const home=homes[0]||{x:START_PLAIN.x,z:START_PLAIN.z};
