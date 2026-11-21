@@ -146,8 +146,9 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
   <p>世界が完成しました。あなたの文明は住民5人の小さな集落から始まります。最初の居住地は、建設しやすい広大で平坦な草原です。</p>
   <ul>
    <li>住居と小さな農場が最初から建っています。</li>
-   <li>建設メニューから建物を選び、地面をタップして配置できます。</li>
-   <li>食料・木材・石材と住民の働き手を確認しながら発展させましょう。</li>
+   <li>移動モードと選択モードを切り替え、選択モードではマスの地形や建物を確認できます。</li>
+   <li>建設メニューから建物を選び、移動モードで地面をタップして配置できます。</li>
+   <li>画面左側の「最初の集落」の目標を参考に、土地の確認・住居・伐採所・人口増加を進めましょう。</li>
    <li>時間は停止中です。準備ができたら右上の「時間を再開」を押してください。</li>
   </ul>
   <button class="titleButton" id="closeStartBriefing">集落を確認する</button>
@@ -773,7 +774,7 @@ const seasons=["春","夏","秋","冬"];
 const eras=["原始時代","農耕時代","金属時代","中世時代","産業時代","近代","先進時代"];
 const buildingTypes={
  hut:{name:"住居",cost:{wood:12,stone:0,money:8},size:1,capacity:5,color:0xb88b5c,desc:"人口の住まい。定員+5。"},
- farm:{name:"農地",cost:{wood:5,stone:0,money:5},size:2,food:3,color:0x9b9a48,desc:"5日ごとに食料を生産。"},
+ farm:{name:"農地",cost:{wood:5,stone:0,money:5},size:2,food:6,color:0x9b9a48,desc:"5日ごとに食料を生産。"},
  woodcutter:{name:"伐採所",cost:{wood:8,stone:0,money:8},size:1,wood:2,color:0x795438,desc:"森林が近いと木材を生産。"},
  quarry:{name:"採石場",cost:{wood:8,stone:3,money:12},size:2,stone:1,color:0x85877e,desc:"石材を少しずつ採掘。"},
  store:{name:"倉庫",cost:{wood:15,stone:3,money:15},size:2,storage:100,color:0x9b754c,desc:"資源の保管上限を拡張。"},
