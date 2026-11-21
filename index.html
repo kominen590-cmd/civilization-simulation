@@ -66,6 +66,8 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 .titleButton.secondary{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.35)}
 .titleButton:disabled{opacity:.4}
 .titleNote{font-size:12px;color:#d4e0eb;line-height:1.65;margin:12px 0 0}
+.titleActions.single{grid-template-columns:1fr}
+.titleFile{display:none}
 @media(max-width:520px){.titleSubscreen{width:92%;padding:18px 15px}.settingRow{font-size:12px}.settingRow select{font-size:12px;min-height:38px}}
 
 </style>
@@ -89,13 +91,33 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
     <div class="titleActions"><button class="titleButton secondary" data-home="1">戻る</button><button class="titleButton" id="startNewWorldButton">世界を生成</button></div>
    </section>
    <section id="settingsScreen" class="titleSubscreen">
-    <h2>設定</h2>
-    <p class="titleNote">このゲームは音声を使用しません。操作はiPadのタッチ操作に対応しています。</p>
+    <h2>設定・その他</h2>
+    <p class="titleNote">このゲームは音声を使用しません。iPadのタッチ操作に対応しています。</p>
     <div class="titleActions"><button class="titleButton secondary" data-home="1">タイトルへ戻る</button><button class="titleButton" id="settingsContinueButton">続きから</button></div>
+    <div class="titleActions"><button class="titleButton secondary" id="saveManageButton">セーブデータ管理</button><button class="titleButton secondary" id="howToButton">遊び方</button></div>
+    <div class="titleActions single"><button class="titleButton secondary" id="creditsButton">クレジット</button></div>
    </section>
    <section id="saveManageScreen" class="titleSubscreen">
-    <h2>セーブデータ</h2><p id="saveManageInfo" class="titleNote">保存データを確認しています。</p>
-    <div class="titleActions"><button class="titleButton secondary" data-home="1">戻る</button><button class="titleButton" id="manageContinueButton">このデータを開く</button></div>
+    <h2>セーブデータ管理</h2>
+    <p id="saveManageInfo" class="titleNote">保存データを確認しています。</p>
+    <div class="titleActions"><button class="titleButton secondary" data-home="1">タイトルへ戻る</button><button class="titleButton" id="manageContinueButton">このデータを開く</button></div>
+    <div class="titleActions"><button class="titleButton secondary" id="titleExportSave">バックアップを書き出す</button><button class="titleButton secondary" id="titleImportSave">バックアップを読み込む</button></div>
+    <input class="titleFile" id="titleImportFile" type="file" accept="application/json,.json">
+    <p class="titleNote">読み込みは、この世界のシードに対応するバックアップのみ可能です。別の世界のデータは現在読み込めません。</p>
+   </section>
+   <section id="howToScreen" class="titleSubscreen">
+    <h2>遊び方</h2>
+    <p class="titleNote">画面をドラッグしてカメラを回転し、2本指で操作して視点を調整します。建設メニューから建物を選び、地面をタップすると配置できます。</p>
+    <p class="titleNote">住居は人口の上限を増やし、農地は食料、伐採所は木材、採石場は石材を生産します。住民を支える資源を確保しながら集落を発展させましょう。</p>
+    <p class="titleNote">右上の時間ボタンで一時停止・再開ができます。セーブボタンで保存し、タイトル画面の「つづきから」から再開できます。設定・その他からバックアップの書き出しと読み込みも行えます。</p>
+    <div class="titleActions single"><button class="titleButton secondary" id="howToBack">戻る</button></div>
+   </section>
+   <section id="creditsScreen" class="titleSubscreen">
+    <h2>クレジット</h2>
+    <p class="titleNote">文明発展シミュレーション</p>
+    <p class="titleNote">Three.js を使用したブラウザ向け3Dシミュレーションです。</p>
+    <p class="titleNote">ゲームの企画・仕様：ユーザー</p>
+    <div class="titleActions single"><button class="titleButton secondary" id="creditsBack">戻る</button></div>
    </section>
   </div>
  </div>
@@ -817,6 +839,7 @@ function saveGame(notify=true){
 }
 function loadGameData(data){
  if(!data||data.version!==6||!data.state)throw new Error("保存データの形式が違います");
+ if(Number(data.seed)!==SEED)throw new Error("このバックアップは別のワールドのデータです");
  const s=data.state;
  const numeric=["day","year","season","population","money","food","wood","stone","housing","workers","nextId","era","elapsed","research","lastGrowth","foodProduced","woodProduced","stoneProduced"];
  numeric.forEach(k=>{if(Number.isFinite(Number(s[k])))gameState[k]=Number(s[k]);});
@@ -827,6 +850,15 @@ function loadGameData(data){
   if(Array.isArray(data.camera.position))camera.position.fromArray(data.camera.position);
   if(Array.isArray(data.camera.target))controls.target.fromArray(data.camera.target);
  }
+}
+function initializeNewGame(){
+ gameState.day=1;gameState.year=1;gameState.season=0;gameState.paused=false;gameState.elapsed=0;
+ gameState.population=5;gameState.money=120;gameState.food=80;gameState.wood=35;gameState.stone=15;
+ gameState.housing=8;gameState.workers=5;gameState.buildings=[];gameState.selected=null;
+ gameState.nextId=1;gameState.foodProduced=0;gameState.woodProduced=0;gameState.stoneProduced=0;
+ gameState.research=0;gameState.era=0;gameState.lastGrowth=0;
+ gameState.buildings=[{id:gameState.nextId++,type:"hut",x:-58,z:-22,builtDay:1},{id:gameState.nextId++,type:"farm",x:-24,z:-32,builtDay:1}];
+ restoreBuildings();updateHUD();saveGame(false);
 }
 function loadGame(){
  try{
@@ -960,13 +992,17 @@ function showTitleSection(id){
  if(id!=="homeMenu")document.getElementById(id).classList.add("active");
 }
 function hasCurrentSave(){
- if(localStorage.getItem(SAVE_KEY))return true;
- try{const old=JSON.parse(localStorage.getItem("civilizationSimulationSaveV6")||"null");return !!old&&old.seed===SEED;}catch(e){return false;}
+ try{
+  const raw=localStorage.getItem(SAVE_KEY);
+  if(raw){const d=JSON.parse(raw);return d.version===6&&Number(d.seed)===SEED&&!!d.state;}
+  const old=JSON.parse(localStorage.getItem("civilizationSimulationSaveV6")||"null");
+  return !!old&&old.version===6&&Number(old.seed)===SEED&&!!old.state;
+ }catch(e){return false;}
 }
 function enterGame(mode){
  document.getElementById("titleScreen").classList.add("hidden");
  gameStarted=true;
- loadGame();
+ if(mode==="new")initializeNewGame();else loadGame();
  gameState.paused=false;updateHUD();
 }
 document.getElementById("hitNewGame").addEventListener("click",()=>{
@@ -1008,11 +1044,33 @@ document.getElementById("hitSettings").addEventListener("click",()=>{
  document.getElementById("settingsContinueButton").disabled=!exists;
  showTitleSection("settingsScreen");
 });
-document.getElementById("saveManageButton")?.addEventListener("click",()=>{
+function refreshSaveManagement(){
  const exists=hasCurrentSave();
- document.getElementById("saveManageInfo").textContent=exists?"この世界のセーブデータが見つかりました。":"まだセーブデータがありません。";
+ document.getElementById("saveManageInfo").textContent=exists?"この世界のセーブデータが見つかりました。":"この世界のセーブデータはまだありません。";
  document.getElementById("manageContinueButton").disabled=!exists;
- showTitleSection("saveManageScreen");
+ document.getElementById("titleExportSave").disabled=!exists;
+}
+document.getElementById("saveManageButton").addEventListener("click",()=>{refreshSaveManagement();showTitleSection("saveManageScreen");});
+document.getElementById("howToButton").addEventListener("click",()=>showTitleSection("howToScreen"));
+document.getElementById("creditsButton").addEventListener("click",()=>showTitleSection("creditsScreen"));
+document.getElementById("howToBack").addEventListener("click",()=>showTitleSection("settingsScreen"));
+document.getElementById("creditsBack").addEventListener("click",()=>showTitleSection("settingsScreen"));
+document.getElementById("titleExportSave").addEventListener("click",()=>{
+ const raw=localStorage.getItem(SAVE_KEY);if(!raw){refreshSaveManagement();return;}
+ const blob=new Blob([raw],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+ a.href=url;a.download="civilization-save.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ document.getElementById("saveManageInfo").textContent="バックアップを書き出しました。";
+});
+document.getElementById("titleImportSave").addEventListener("click",()=>document.getElementById("titleImportFile").click());
+document.getElementById("titleImportFile").addEventListener("change",async e=>{
+ const file=e.target.files[0];if(!file)return;
+ try{
+  const data=JSON.parse(await file.text());
+  if(!data||data.version!==6||Number(data.seed)!==SEED||!data.state)throw new Error("別ワールドまたは形式違い");
+  loadGameData(data);saveGame(false);refreshSaveManagement();
+  document.getElementById("saveManageInfo").textContent="バックアップを読み込みました。";
+ }catch(err){document.getElementById("saveManageInfo").textContent=err.message==="別ワールドまたは形式違い"?"別のワールドのデータ、または対応していない形式です。":"バックアップを読み込めませんでした。";}
+ e.target.value="";
 });
 document.querySelectorAll("[data-home]").forEach(btn=>btn.addEventListener("click",()=>showTitleSection("homeMenu")));
 const continueButton=document.getElementById("hitContinue");
