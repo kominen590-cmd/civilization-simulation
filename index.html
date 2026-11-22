@@ -629,11 +629,16 @@ for(let i=0;i<positions.count;i++){
  if(terrainCounts[data.kind]!==undefined)terrainCounts[data.kind]++;
 
  const color=new THREE.Color(palette[data.kind]||palette.plain);
- const broadVariation=noise(x+123,z-321,15)*0.10;
- const fineVariation=noise(x-817,z+419,4)*0.045;
+ const broadVariation=noise(x+123,z-321,15)*0.11;
+ const fineVariation=noise(x-817,z+419,4)*0.055;
+ const groundPatch=noise(x+2310,z-1740,7);
  const moistureTint=THREE.MathUtils.clamp((data.moisture||0.5)-0.5,-0.5,0.5);
- color.multiplyScalar(0.91+broadVariation+fineVariation);
- if(data.kind==="plain"||data.kind==="wetland")color.lerp(new THREE.Color(0x78945a),Math.max(0,moistureTint)*0.10);
+ color.multiplyScalar(0.88+broadVariation+fineVariation+(groundPatch-0.5)*0.10);
+ if(data.kind==="plain"||data.kind==="wetland")color.lerp(new THREE.Color(0x78945a),Math.max(0,moistureTint)*0.12);
+ if(isStartingPlain(x,z)){
+  const worn=THREE.MathUtils.smoothstep(groundPatch,0.66,0.91);
+  color.lerp(new THREE.Color(0x9a8b5b),worn*0.13);
+ }
  colors.push(color.r,color.g,color.b);
 }
 
@@ -650,7 +655,7 @@ for(let py=0;py<128;py++)for(let px=0;px<128;px++){
 }
 const surfaceBump=new THREE.DataTexture(surfacePixels,128,128,THREE.RGBAFormat);
 surfaceBump.wrapS=surfaceBump.wrapT=THREE.RepeatWrapping;
-surfaceBump.repeat.set(42,42);
+surfaceBump.repeat.set(54,54);
 surfaceBump.colorSpace=THREE.NoColorSpace;
 surfaceBump.needsUpdate=true;
 
@@ -665,7 +670,7 @@ for(let py=0;py<256;py++)for(let px=0;px<256;px++){
 }
 const terrainColorTexture=new THREE.DataTexture(terrainColorPixels,256,256,THREE.RGBAFormat);
 terrainColorTexture.wrapS=terrainColorTexture.wrapT=THREE.RepeatWrapping;
-terrainColorTexture.repeat.set(34,34);
+terrainColorTexture.repeat.set(48,48);
 terrainColorTexture.colorSpace=THREE.SRGBColorSpace;
 terrainColorTexture.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
 terrainColorTexture.needsUpdate=true;
@@ -923,7 +928,7 @@ scene.add(rocks);
 // 岩の周囲に小石を散らし、岩場と地面の境界を自然につなぐ。共有ジオメトリ＋InstancedMeshで軽量化。
 const pebbleGeometry=new THREE.DodecahedronGeometry(0.16,1);
 const pebbleMaterial=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.99});
-const pebbles=new THREE.InstancedMesh(pebbleGeometry,pebbleMaterial,MAX_ROCKS*4);
+const pebbles=new THREE.InstancedMesh(pebbleGeometry,pebbleMaterial,MAX_ROCKS*4+180);
 const pebbleDummy=new THREE.Object3D();
 let pebbleCount=0;
 for(let i=0;i<rockLocations.length;i++){
@@ -942,6 +947,21 @@ for(let i=0;i<rockLocations.length;i++){
   const tint=new THREE.Color().setHSL(0.10,0.025,0.38+hash(i*3+n*7,SEED+71)*0.16);
   pebbles.setColorAt(pebbleCount,tint);pebbleCount++;
  }
+}
+// 最初の草原にも少量の自然石を散らし、完全に均一な床に見えないようにする。
+for(let i=0;i<180;i++){
+ const angle=hash(i+1901,SEED+2201)*Math.PI*2;
+ const radius=12+Math.sqrt(hash(i+2003,SEED+2303))*25;
+ const px=START_PLAIN.x+Math.cos(angle)*radius*1.12;
+ const pz=START_PLAIN.z+Math.sin(angle)*radius*0.82;
+ if(!isStartingPlain(px,pz)||Math.hypot(px+48,pz+20)<9||Math.hypot(px+38,pz+28)<7)continue;
+ const scale=0.22+hash(i+2101,SEED+2401)*0.55;
+ pebbleDummy.position.set(px,0.57,pz);
+ pebbleDummy.scale.set(scale,scale*0.55,scale*0.82);
+ pebbleDummy.rotation.set(0.12,angle,0.08);
+ pebbleDummy.updateMatrix();pebbles.setMatrixAt(pebbleCount,pebbleDummy.matrix);
+ pebbles.setColorAt(pebbleCount,new THREE.Color().setHSL(0.10,0.035,0.34+hash(i+2203,SEED+2503)*0.18));
+ pebbleCount++;
 }
 pebbles.count=pebbleCount;pebbles.instanceMatrix.needsUpdate=true;
 if(pebbles.instanceColor)pebbles.instanceColor.needsUpdate=true;
@@ -962,7 +982,7 @@ for(let b=0;b<5;b++){
 grassGeometry.setAttribute("position",new THREE.Float32BufferAttribute(bladeVertices,3));
 grassGeometry.computeVertexNormals();grassGeometry.computeBoundingSphere();
 const grassMaterial=new THREE.MeshStandardMaterial({color:0x829653,roughness:1,side:THREE.DoubleSide});
-const grass=new THREE.InstancedMesh(grassGeometry,grassMaterial,2200);
+const grass=new THREE.InstancedMesh(grassGeometry,grassMaterial,6400);
 const grassDummy=new THREE.Object3D();
 let grassCount=0;
 for(let i=0;i<2200;i++){
@@ -978,6 +998,21 @@ for(let i=0;i<2200;i++){
  tint.multiplyScalar(0.82+hash(i+63,SEED+29)*0.36);
  grass.setColorAt(grassCount,tint);grassCount++;
 }
+// 序盤の草原専用ディテール。広い範囲に草株を増やしつつ、集落の中心と建物予定地は空ける。
+for(let i=0;i<4200;i++){
+ const angle=hash(i*13+3001,SEED+3101)*Math.PI*2;
+ const radius=Math.sqrt(hash(i*17+3007,SEED+3203));
+ const px=START_PLAIN.x+Math.cos(angle)*radius*37;
+ const pz=START_PLAIN.z+Math.sin(angle)*radius*29;
+ if(!isStartingPlain(px,pz)||Math.hypot(px+48,pz+20)<9.5||Math.hypot(px+38,pz+28)<7.5)continue;
+ const size=0.38+hash(i+3301,SEED+3307)*0.82;
+ grassDummy.position.set(px,0.69,pz);
+ grassDummy.scale.set(size,size*(0.82+hash(i+3311,SEED+3313)*0.45),size);
+ grassDummy.rotation.set(0,hash(i+3323,SEED+3329)*Math.PI*2,0);
+ grassDummy.updateMatrix();grass.setMatrixAt(grassCount,grassDummy.matrix);
+ const tint=new THREE.Color().setHSL(0.19+hash(i+3331,SEED+3337)*0.045,0.30+hash(i+3341,SEED+3343)*0.22,0.30+hash(i+3347,SEED+3359)*0.12);
+ grass.setColorAt(grassCount,tint);grassCount++;
+}
 grass.count=grassCount;grass.instanceMatrix.needsUpdate=true;
 if(grass.instanceColor)grass.instanceColor.needsUpdate=true;
 grass.castShadow=false;scene.add(grass);
@@ -985,7 +1020,7 @@ grass.castShadow=false;scene.add(grass);
 // 低木：森林の縁や湿った平地に点在させ、木々の足元を自然につなぐ。
 const bushGeometry=new THREE.IcosahedronGeometry(0.72,2);
 const bushMaterial=new THREE.MeshStandardMaterial({color:0x527443,roughness:1});
-const bushes=new THREE.InstancedMesh(bushGeometry,bushMaterial,420);
+const bushes=new THREE.InstancedMesh(bushGeometry,bushMaterial,560);
 let bushCount=0;
 for(let i=0;i<420;i++){
  const x=(hash(i*11+401,SEED+301)-0.5)*WORLD_SIZE;
@@ -1001,6 +1036,21 @@ for(let i=0;i<420;i++){
  const bushTint=new THREE.Color(0x527443).multiplyScalar(0.82+hash(i+811,SEED+907)*0.34);
  bushes.setColorAt(bushCount,bushTint);bushCount++;
 }
+// 草原の外縁に低木を少しだけ置き、平原から森林へ自然につなぐ。
+for(let i=0;i<140;i++){
+ const angle=hash(i+4101,SEED+4201)*Math.PI*2;
+ const radius=23+hash(i+4111,SEED+4211)*11;
+ const px=START_PLAIN.x+Math.cos(angle)*radius*1.08;
+ const pz=START_PLAIN.z+Math.sin(angle)*radius*0.82;
+ if(!isStartingPlain(px,pz)||Math.hypot(px+48,pz+20)<15||Math.hypot(px+38,pz+28)<13)continue;
+ const scale=0.28+hash(i+4127,SEED+4229)*0.42;
+ grassDummy.position.set(px,0.5+0.72*scale,pz);
+ grassDummy.scale.set(scale*1.2,scale*0.72,scale);
+ grassDummy.rotation.set(0,hash(i+4133,SEED+4231)*Math.PI,0);
+ grassDummy.updateMatrix();bushes.setMatrixAt(bushCount,grassDummy.matrix);
+ bushes.setColorAt(bushCount,new THREE.Color(0x647b43).multiplyScalar(0.82+hash(i+4141,SEED+4241)*0.3));
+ bushCount++;
+}
 bushes.count=bushCount;bushes.instanceMatrix.needsUpdate=true;
 bushes.castShadow=false;if(bushes.instanceColor)bushes.instanceColor.needsUpdate=true;scene.add(bushes);
 
@@ -1009,8 +1059,8 @@ const flowerStemGeometry=new THREE.CylinderGeometry(0.012,0.02,0.30,5);
 const flowerHeadGeometry=new THREE.SphereGeometry(0.075,8,6);
 const flowerStemMaterial=new THREE.MeshStandardMaterial({color:0x54733d,roughness:1});
 const flowerHeadMaterial=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.88});
-const flowerStems=new THREE.InstancedMesh(flowerStemGeometry,flowerStemMaterial,320);
-const flowerHeads=new THREE.InstancedMesh(flowerHeadGeometry,flowerHeadMaterial,320);
+const flowerStems=new THREE.InstancedMesh(flowerStemGeometry,flowerStemMaterial,760);
+const flowerHeads=new THREE.InstancedMesh(flowerHeadGeometry,flowerHeadMaterial,760);
 const flowerDummy=new THREE.Object3D();
 let flowerCount=0;
 for(let i=0;i<320;i++){
@@ -1029,6 +1079,25 @@ for(let i=0;i<320;i++){
  flowerDummy.updateMatrix();flowerHeads.setMatrixAt(flowerCount,flowerDummy.matrix);
  const palette=[0xe5dfc7,0xd6c78a,0xb8a9c7,0xd7d5cf];
  flowerHeads.setColorAt(flowerCount,new THREE.Color(palette[Math.floor(hash(i+41,SEED+1601)*palette.length)]));
+ flowerCount++;
+}
+// 野花は一面に敷き詰めず、小さな群落として点在させる。
+const openingFlowerColors=[0xe5dfc7,0xd6c78a,0xb8a9c7,0xd7d5cf,0xe2b7a2];
+for(let i=0;i<440;i++){
+ const cluster=Math.floor(i/22);
+ const clusterAngle=hash(cluster+5101,SEED+5201)*Math.PI*2;
+ const clusterRadius=12+hash(cluster+5111,SEED+5211)*22;
+ const cx=START_PLAIN.x+Math.cos(clusterAngle)*clusterRadius;
+ const cz=START_PLAIN.z+Math.sin(clusterAngle)*clusterRadius*0.78;
+ const angle=hash(i+5123,SEED+5227)*Math.PI*2;
+ const distance=Math.sqrt(hash(i+5131,SEED+5233))*3.2;
+ const px=cx+Math.cos(angle)*distance,pz=cz+Math.sin(angle)*distance;
+ if(!isStartingPlain(px,pz)||Math.hypot(px+48,pz+20)<10||Math.hypot(px+38,pz+28)<8)continue;
+ const scale=0.48+hash(i+5143,SEED+5249)*0.65;
+ flowerDummy.position.set(px,0.5+0.15*scale,pz);flowerDummy.scale.setScalar(scale);
+ flowerDummy.rotation.set(0,angle,0);flowerDummy.updateMatrix();flowerStems.setMatrixAt(flowerCount,flowerDummy.matrix);
+ flowerDummy.position.y=0.5+0.31*scale;flowerDummy.updateMatrix();flowerHeads.setMatrixAt(flowerCount,flowerDummy.matrix);
+ flowerHeads.setColorAt(flowerCount,new THREE.Color(openingFlowerColors[Math.floor(hash(i+5153,SEED+5251)*openingFlowerColors.length)]));
  flowerCount++;
 }
 flowerStems.count=flowerCount;flowerHeads.count=flowerCount;
