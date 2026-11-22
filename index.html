@@ -669,6 +669,7 @@ const leafMaterial=new THREE.MeshStandardMaterial({color:0xffffff});
 const MAX_TREES=Math.round(2200*({low:0.65,normal:1,high:1.4}[savedWorldSettings.resources]||1));
 const treeTrunks=new THREE.InstancedMesh(trunkGeometry,trunkMaterial,MAX_TREES);
 const treeLeaves=new THREE.InstancedMesh(leafGeometry,leafMaterial,MAX_TREES);
+const treeCanopyUpper=new THREE.InstancedMesh(leafGeometry,leafMaterial,MAX_TREES);
 const dummy=new THREE.Object3D();
 let treeCount=0;
 const treeLocations=[];
@@ -741,6 +742,11 @@ for(let i=0;i<MAX_TREES;i++){
  dummy.scale.set(1.22*scale,1.48*scale,1.12*scale);
  dummy.updateMatrix();
  treeLeaves.setMatrixAt(treeCount,dummy.matrix);
+ dummy.position.set(x-0.22*scale,y+2.82*scale,z+0.08*scale);
+ dummy.scale.set(0.82*scale,1.02*scale,0.82*scale);
+ dummy.rotation.y+=0.65;
+ dummy.updateMatrix();
+ treeCanopyUpper.setMatrixAt(treeCount,dummy.matrix);
  dummy.scale.setScalar(scale);
  const leafColor=new THREE.Color();
  if(moisture>0.72)leafColor.setHex(0x244d3c);
@@ -748,17 +754,22 @@ for(let i=0;i<MAX_TREES;i++){
  else if(moisture<0.32)leafColor.setHex(0x6c7540);
  else leafColor.setHex(0x315b35);
  treeLeaves.setColorAt(treeCount,leafColor);
+ const upperColor=leafColor.clone().multiplyScalar(1.12);
+ treeCanopyUpper.setColorAt(treeCount,upperColor);
 
  treeCount++;
 }
 
 treeTrunks.count=treeCount;
 treeLeaves.count=treeCount;
+treeCanopyUpper.count=treeCount;
 treeTrunks.instanceMatrix.needsUpdate=true;
 treeLeaves.instanceMatrix.needsUpdate=true;
+treeCanopyUpper.instanceMatrix.needsUpdate=true;
 if(treeLeaves.instanceColor)treeLeaves.instanceColor.needsUpdate=true;
-treeTrunks.castShadow=false;treeLeaves.castShadow=false;
-scene.add(treeTrunks,treeLeaves);
+if(treeCanopyUpper.instanceColor)treeCanopyUpper.instanceColor.needsUpdate=true;
+treeTrunks.castShadow=false;treeLeaves.castShadow=false;treeCanopyUpper.castShadow=false;
+scene.add(treeTrunks,treeLeaves,treeCanopyUpper);
 
 // 石材鉱床：集落から少し離れた丘陵に、探索して見つける採石候補地を生成する。
 const stoneDepositCenters=[];
@@ -1691,6 +1702,34 @@ function syncResidentVisuals(){
    const head=new THREE.Mesh(new THREE.BoxGeometry(0.38,0.09,0.11),toolMetal);head.position.set(0.19,-0.55,0);head.rotation.z=-0.18;toolGroup.add(head);
   }
   toolGroup.visible=!!toolType;
+  // 服の重なり・襟・袖口で小さな住民にも布の厚みを持たせる。
+  const clothAccent=new THREE.MeshStandardMaterial({color:[0xb49a70,0x7d8d78,0xb5aa8d,0x8d765e][i%4],roughness:1});
+  const collar=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.22,4),clothAccent);
+  collar.position.set(0,1.39,0.02);collar.rotation.x=Math.PI;group.add(collar);
+  const vest=new THREE.Mesh(new THREE.BoxGeometry(0.43,0.62,0.31),clothAccent);
+  vest.position.set(0,1.03,0.015);group.add(vest);
+  for(const side of [-1,1]){
+   const cuff=new THREE.Mesh(new THREE.CylinderGeometry(0.105,0.11,0.16,7),clothAccent);
+   cuff.position.set(side*0.34,0.78,0.015);cuff.rotation.z=side*0.12;group.add(cuff);
+  }
+  const eyeMat=new THREE.MeshStandardMaterial({color:0x282522,roughness:1});
+  for(const side of [-1,1]){
+   const eye=new THREE.Mesh(new THREE.SphereGeometry(0.035,6,5),eyeMat);
+   eye.position.set(side*0.105,1.64,0.185);eye.scale.set(1,0.8,0.45);group.add(eye);
+  }
+  const headwearMat=new THREE.MeshStandardMaterial({color:toolType==="farm"?0x9b8453:toolType==="woodcutter"?0x725239:toolType==="quarry"?0x77766c:[0x8b704e,0x6e806d,0x947e62][i%3],roughness:1});
+  if(toolType==="farm"||toolType==="woodcutter"||toolType==="quarry"||i%4===0){
+   const cap=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.25,0.13,8),headwearMat);
+   cap.position.set(0,1.83,-0.025);group.add(cap);
+   const brim=new THREE.Mesh(new THREE.CylinderGeometry(0.29,0.29,0.045,8),headwearMat);
+   brim.position.set(0,1.77,0.015);group.add(brim);
+  }
+  if(toolType==="woodcutter"||toolType==="quarry"){
+   const satchel=new THREE.Mesh(new THREE.BoxGeometry(0.28,0.34,0.18),clothAccent);
+   satchel.position.set(-0.27,0.91,-0.19);group.add(satchel);
+   const strap=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.7,0.07),dark);
+   strap.position.set(-0.18,1.12,-0.12);strap.rotation.z=-0.42;group.add(strap);
+  }
   const home=homeAssignments[i]||homes[i%Math.max(1,homes.length)]||fallbackHome;
   const homeAngle=i*2.399+(Math.floor(i/5)*0.37);
   const homeRadius=(CELL*(buildingTypes.hut.size||1))/2+1.05;
