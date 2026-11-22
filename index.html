@@ -327,6 +327,39 @@ sun.shadow.bias=-0.00018;
 sun.shadow.normalBias=0.035;
 scene.add(sun);
 
+// 空の色を地平線から天頂へ滑らかに変化させ、単色背景から自然な大気表現へ。
+const skyGeometry=new THREE.SphereGeometry(650,40,24);
+const skyPositions=skyGeometry.attributes.position;
+const skyColors=[];
+const horizonColor=new THREE.Color(0xb9d0d7);
+const zenithColor=new THREE.Color(0x527da5);
+for(let i=0;i<skyPositions.count;i++){
+ const height=skyPositions.getY(i)/650;
+ const t=THREE.MathUtils.clamp((height+0.04)/0.92,0,1);
+ const smoothT=t*t*(3-2*t);
+ const color=horizonColor.clone().lerp(zenithColor,smoothT);
+ if(height>-0.04&&height<0.18)color.lerp(new THREE.Color(0xd9c9ae),0.12*(1-Math.abs(height-0.07)/0.11));
+ skyColors.push(color.r,color.g,color.b);
+}
+skyGeometry.setAttribute("color",new THREE.Float32BufferAttribute(skyColors,3));
+const sky=new THREE.Mesh(skyGeometry,new THREE.MeshBasicMaterial({
+ vertexColors:true,side:THREE.BackSide,depthWrite:false,depthTest:false,fog:false
+}));
+sky.renderOrder=-100;scene.add(sky);
+
+// 太陽本体と淡い光のにじみ。強いブルーム処理を使わず描画負荷を抑える。
+const sunDirection=sun.position.clone().normalize().multiplyScalar(620);
+const sunGlow=new THREE.Mesh(
+ new THREE.SphereGeometry(13,16,10),
+ new THREE.MeshBasicMaterial({color:0xffe3b5,transparent:true,opacity:0.18,depthWrite:false,depthTest:false,fog:false})
+);
+sunGlow.position.copy(sunDirection);sunGlow.renderOrder=-99;scene.add(sunGlow);
+const sunDisc=new THREE.Mesh(
+ new THREE.SphereGeometry(4.2,20,14),
+ new THREE.MeshBasicMaterial({color:0xfff1d4,depthWrite:false,depthTest:false,fog:false})
+);
+sunDisc.position.copy(sunDirection);sunDisc.renderOrder=-98;scene.add(sunDisc);
+
 function smooth(t){return t*t*(3-2*t)}
 function hash(x,z){
  let n=Math.sin(x*127.1+z*311.7+SEED*0.001)*43758.5453;
