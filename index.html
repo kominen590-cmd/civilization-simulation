@@ -410,6 +410,12 @@ function plainsStrength(x,z){
  return smooth(THREE.MathUtils.clamp((field-0.39)/0.31,0,1));
 }
 
+// 平原の中に、集落を広げやすい連続した緩傾斜地を自然に配置する。
+function settlementPatchStrength(x,z){
+ const field=noise(x+2860,z-1740,88)*0.64+noise(x-1180,z+2070,42)*0.36;
+ return smooth(THREE.MathUtils.clamp((field-0.49)/0.19,0,1));
+}
+
 function baseHeight(x,z){
  if(isStartingPlain(x,z))return 0.5;
  const score=landScore(x,z);
@@ -450,6 +456,13 @@ function baseHeight(x,z){
  // 平原帯は標高を低く安定させ、周辺の丘陵・山岳へ滑らかにつなぐ。
  const plainHeight=1.0+noise(x-1910,z+740,52)*0.55+noise(x+630,z-420,18)*0.28;
  height=THREE.MathUtils.lerp(height,plainHeight,plains*0.94);
+
+ // 建設向きの平坦地は広く連続させるが、湖岸・川筋・海岸は地形を保つ。
+ const settlementPatch=settlementPatchStrength(x,z);
+ const lakeSafe=smooth(THREE.MathUtils.clamp(lakeDistance(x,z)/3.2,0,1));
+ const patchBlend=plains*settlementPatch*0.88*lakeSafe;
+ const settlementHeight=1.15+noise(x-2470,z+930,92)*0.10+noise(x+1540,z-2210,38)*0.05;
+ height=THREE.MathUtils.lerp(height,settlementHeight,patchBlend);
 
  // 海岸の砂浜
  if(score<0.18)height=Math.min(height,0.65);
