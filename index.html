@@ -660,7 +660,7 @@ for(let py=0;py<BUMP_SIZE;py++)for(let px=0;px<BUMP_SIZE;px++){
  const broad=tileNoise(px,py,64,BUMP_SIZE);
  const middle=tileNoise(px,py,16,BUMP_SIZE);
  const fine=tileNoise(px,py,4,BUMP_SIZE);
- const grain=hash(px+71,py-113);
+ const grain=hash((px+71)%BUMP_SIZE,(py-113+BUMP_SIZE)%BUMP_SIZE);
  const value=Math.round(116+broad*30+middle*34+fine*24+grain*12);
  const k=(py*BUMP_SIZE+px)*4;
  surfacePixels[k]=value;surfacePixels[k+1]=value;surfacePixels[k+2]=value;surfacePixels[k+3]=255;
@@ -679,7 +679,7 @@ for(let py=0;py<COLOR_SIZE;py++)for(let px=0;px<COLOR_SIZE;px++){
  const broad=tileNoise(px,py,128,COLOR_SIZE);
  const patch=tileNoise(px,py,32,COLOR_SIZE);
  const grain=tileNoise(px,py,8,COLOR_SIZE);
- const fleck=hash(px+1201,py-907);
+ const fleck=hash((px+1201)%COLOR_SIZE,(py-907+COLOR_SIZE)%COLOR_SIZE);
  const soil=patch>0.67?1:0;
  const r=Math.round(216+broad*8+patch*10+grain*7+(fleck>0.965?12:0)+soil*2);
  const g=Math.round(218+broad*9+patch*9+grain*8+(fleck>0.965?10:0)-soil*3);
