@@ -680,6 +680,33 @@ const terrain=new THREE.Mesh(
 terrain.receiveShadow=true;
 scene.add(terrain);
 
+// ひな壇の段差面。隣接頂点の高さが異なる場所に垂直な土壁を重ね、坂ではなく段として見せる。
+const terraceWallPositions=[];
+function addTerraceWall(a,b){
+ const ax=a.x,az=a.z,bx=b.x,bz=b.z,ah=a.y,bh=b.y;
+ if(Math.abs(ah-bh)<TERRACE_STEP*0.45)return;
+ const low=Math.min(ah,bh),high=Math.max(ah,bh);
+ terraceWallPositions.push(ax,low,az,bx,low,bz,bx,high,bz,ax,low,az,bx,high,bz,ax,high,az);
+}
+for(let row=0;row<=GRID;row++)for(let col=0;col<=GRID;col++){
+ const index=row*(GRID+1)+col,a={x:positions.getX(index),y:positions.getY(index),z:positions.getZ(index)};
+ if(col<GRID){
+  const j=index+1,b={x:positions.getX(j),y:positions.getY(j),z:positions.getZ(j)};
+  if(!terrainData(a.x,a.z).water&&!terrainData(b.x,b.z).water)addTerraceWall(a,b);
+ }
+ if(row<GRID){
+  const j=index+GRID+1,b={x:positions.getX(j),y:positions.getY(j),z:positions.getZ(j)};
+  if(!terrainData(a.x,a.z).water&&!terrainData(b.x,b.z).water)addTerraceWall(a,b);
+ }
+}
+const terraceWallGeometry=new THREE.BufferGeometry();
+terraceWallGeometry.setAttribute("position",new THREE.Float32BufferAttribute(terraceWallPositions,3));
+terraceWallGeometry.computeVertexNormals();
+const terraceWalls=new THREE.Mesh(terraceWallGeometry,new THREE.MeshStandardMaterial({
+ color:0x766b52,roughness:1,metalness:0,side:THREE.DoubleSide
+}));
+terraceWalls.receiveShadow=true;terraceWalls.castShadow=true;scene.add(terraceWalls);
+
 // 海面
 const ocean=new THREE.Mesh(
  new THREE.PlaneGeometry(500,500),
