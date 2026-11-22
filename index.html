@@ -1203,6 +1203,9 @@ function revealAroundCamera(){
  if(changed){
   gameState.exploredCells=[...exploredCellSet];
   updateFogMesh();
+  // 探索目標と次の案内を、霧が晴れたその場で更新する。
+  updateStartGoals();
+  updateFirstBuildHint();
   saveGame(false);
  }
 }
