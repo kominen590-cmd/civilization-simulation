@@ -683,17 +683,23 @@ for(const curve of riverCurves){
 }
 
 // 森林：群落を作る
-const trunkGeometry=new THREE.CylinderGeometry(0.11,0.2,1.25,7);
+const trunkGeometry=new THREE.CylinderGeometry(0.11,0.2,1.25,9);
+const branchGeometry=new THREE.CylinderGeometry(0.045,0.085,1,7);
 const leafGeometry=new THREE.IcosahedronGeometry(0.88,1);
-const trunkMaterial=new THREE.MeshStandardMaterial({color:0x705039});
-const leafMaterial=new THREE.MeshStandardMaterial({color:0xffffff});
+const trunkMaterial=new THREE.MeshStandardMaterial({color:0x705039,roughness:0.96});
+const branchMaterial=new THREE.MeshStandardMaterial({color:0x62442f,roughness:1});
+const leafMaterial=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.92});
 
 const MAX_TREES=Math.round(2200*({low:0.65,normal:1,high:1.4}[savedWorldSettings.resources]||1));
 const treeTrunks=new THREE.InstancedMesh(trunkGeometry,trunkMaterial,MAX_TREES);
+const treeBranches=new THREE.InstancedMesh(branchGeometry,branchMaterial,MAX_TREES*2);
 const treeLeaves=new THREE.InstancedMesh(leafGeometry,leafMaterial,MAX_TREES);
 const treeCanopyUpper=new THREE.InstancedMesh(leafGeometry,leafMaterial,MAX_TREES);
+const treeCanopySide=new THREE.InstancedMesh(leafGeometry,leafMaterial,MAX_TREES*2);
 const dummy=new THREE.Object3D();
-let treeCount=0;
+const branchDummy=new THREE.Object3D();
+const branchStart=new THREE.Vector3(),branchEnd=new THREE.Vector3(),branchDirection=new THREE.Vector3();
+let treeCount=0,branchCount=0,sideCanopyCount=0;
 const treeLocations=[];
 
 const forestCenters=[];
@@ -706,92 +712,72 @@ function addForestCenter(x,z,r){
  return true;
 }
 // 開始地点のすぐ外側に、最初の伐採候補となる森を最低2か所確保する。
-// 開始平原そのものは開けたままにし、森は探索して見つける配置にする。
 let nearbyForestCount=0;
 for(const angle of [0,Math.PI/4,Math.PI/2,Math.PI*3/4,Math.PI,Math.PI*5/4,Math.PI*3/2,Math.PI*7/4]){
  if(nearbyForestCount>=2)break;
- const distance=48;
- const x=START_PLAIN.x+Math.cos(angle)*distance;
- const z=START_PLAIN.z+Math.sin(angle)*distance;
+ const distance=48,x=START_PLAIN.x+Math.cos(angle)*distance,z=START_PLAIN.z+Math.sin(angle)*distance;
  if(addForestCenter(x,z,15+random()*4))nearbyForestCount++;
 }
-// 残りは陸地の森林向きの場所へ分散させ、海上に無駄な森林候補を置かない。
 let forestAttempts=0;
 while(forestCenters.length<24&&forestAttempts<500){
  forestAttempts++;
- const x=(random()-0.5)*WORLD_SIZE;
- const z=(random()-0.5)*WORLD_SIZE;
- addForestCenter(x,z,12+random()*20);
+ addForestCenter((random()-0.5)*WORLD_SIZE,(random()-0.5)*WORLD_SIZE,12+random()*20);
 }
-
 function forestDensity(x,z){
  let value=0;
- for(const f of forestCenters){
-  const d=Math.hypot(x-f.x,z-f.z);
-  value=Math.max(value,Math.max(0,1-d/f.r));
- }
+ for(const f of forestCenters)value=Math.max(value,Math.max(0,1-Math.hypot(x-f.x,z-f.z)/f.r));
  return value;
 }
-
 for(let i=0;i<MAX_TREES;i++){
- const x=(random()-0.5)*WORLD_SIZE;
- const z=(random()-0.5)*WORLD_SIZE;
- const data=terrainData(x,z);
-
- if(!data.land||isStartingPlain(x,z))continue;
- if(["beach","river","lake","mountain","snow"].includes(data.kind))continue;
-
- const density=forestDensity(x,z);
- const broad=fbm(x+900,z+700);
- const moisture=data.moisture;
- if(data.temperature<0.12||moisture<0.18)continue;
- if(density<0.15&&random()>0.12)continue;
- if(broad<0.30)continue;
- // 平原にも木立を残すが、群落の中心に寄せて建設用の開けた場所を確保する。
+ const x=(random()-0.5)*WORLD_SIZE,z=(random()-0.5)*WORLD_SIZE,data=terrainData(x,z);
+ if(!data.land||isStartingPlain(x,z)||["beach","river","lake","mountain","snow"].includes(data.kind))continue;
+ const density=forestDensity(x,z),broad=fbm(x+900,z+700),moisture=data.moisture;
+ if(data.temperature<0.12||moisture<0.18||(density<0.15&&random()>0.12)||broad<0.30)continue;
  if(random()>(0.20+density*0.60)*(1-data.plains*0.35))continue;
-
- const scale=0.7+random()*0.65;
- const y=data.height;
+ const scale=0.7+random()*0.65,y=data.height,rotation=random()*Math.PI*2;
  treeLocations.push({x,z});
-
- dummy.position.set(x,y+0.6*scale,z);
- dummy.scale.setScalar(scale);
- dummy.rotation.y=random()*Math.PI*2;
- dummy.updateMatrix();
+ dummy.position.set(x,y+0.6*scale,z);dummy.scale.setScalar(scale);dummy.rotation.set(0,rotation,0);dummy.updateMatrix();
  treeTrunks.setMatrixAt(treeCount,dummy.matrix);
-
- dummy.position.set(x,y+2.05*scale,z);
- dummy.scale.set(1.22*scale,1.48*scale,1.12*scale);
- dummy.updateMatrix();
+ // 枝を幹から左右へ伸ばし、樹冠が幹から浮いて見えない構造にする。
+ for(const side of [-1,1]){
+  branchStart.set(x,y+1.05*scale,z);
+  branchEnd.set(x+side*0.72*scale,y+1.95*scale,z+side*0.12*scale);
+  branchDirection.subVectors(branchEnd,branchStart);
+  branchDummy.position.copy(branchStart).add(branchEnd).multiplyScalar(0.5);
+  branchDummy.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),branchDirection.clone().normalize());
+  branchDummy.scale.set(1,branchDirection.length(),1);branchDummy.updateMatrix();
+  treeBranches.setMatrixAt(branchCount++,branchDummy.matrix);
+ }
+ dummy.position.set(x,y+2.05*scale,z);dummy.scale.set(1.22*scale,1.48*scale,1.12*scale);dummy.rotation.set(0,rotation,0);dummy.updateMatrix();
  treeLeaves.setMatrixAt(treeCount,dummy.matrix);
- dummy.position.set(x-0.22*scale,y+2.82*scale,z+0.08*scale);
- dummy.scale.set(0.82*scale,1.02*scale,0.82*scale);
- dummy.rotation.y+=0.65;
- dummy.updateMatrix();
+ dummy.position.set(x-0.22*scale,y+2.82*scale,z+0.08*scale);dummy.scale.set(0.82*scale,1.02*scale,0.82*scale);dummy.rotation.y=rotation+0.65;dummy.updateMatrix();
  treeCanopyUpper.setMatrixAt(treeCount,dummy.matrix);
- dummy.scale.setScalar(scale);
  const leafColor=new THREE.Color();
  if(moisture>0.72)leafColor.setHex(0x244d3c);
  else if(data.temperature<0.28)leafColor.setHex(0x426044);
  else if(moisture<0.32)leafColor.setHex(0x6c7540);
  else leafColor.setHex(0x315b35);
  treeLeaves.setColorAt(treeCount,leafColor);
- const upperColor=leafColor.clone().multiplyScalar(1.12);
- treeCanopyUpper.setColorAt(treeCount,upperColor);
-
+ treeCanopyUpper.setColorAt(treeCount,leafColor.clone().multiplyScalar(1.10));
+ // 左右の樹冠を少しずつずらし、単一の球状シルエットを避ける。
+ for(const side of [-1,1]){
+  dummy.position.set(x+side*0.62*scale,y+2.12*scale,z+side*0.10*scale);
+  dummy.scale.set(0.72*scale,0.88*scale,0.78*scale);
+  dummy.rotation.set(0,rotation+side*0.42,0);dummy.updateMatrix();
+  treeCanopySide.setMatrixAt(sideCanopyCount,dummy.matrix);
+  treeCanopySide.setColorAt(sideCanopyCount,leafColor.clone().multiplyScalar(side===1?0.94:1.04));
+  sideCanopyCount++;
+ }
  treeCount++;
 }
-
-treeTrunks.count=treeCount;
-treeLeaves.count=treeCount;
-treeCanopyUpper.count=treeCount;
-treeTrunks.instanceMatrix.needsUpdate=true;
-treeLeaves.instanceMatrix.needsUpdate=true;
-treeCanopyUpper.instanceMatrix.needsUpdate=true;
-if(treeLeaves.instanceColor)treeLeaves.instanceColor.needsUpdate=true;
-if(treeCanopyUpper.instanceColor)treeCanopyUpper.instanceColor.needsUpdate=true;
-treeTrunks.castShadow=false;treeLeaves.castShadow=false;treeCanopyUpper.castShadow=false;
-scene.add(treeTrunks,treeLeaves,treeCanopyUpper);
+for(const mesh of [treeTrunks,treeBranches,treeLeaves,treeCanopyUpper,treeCanopySide]){
+ mesh.castShadow=false;mesh.receiveShadow=false;
+}
+treeTrunks.count=treeCount;treeBranches.count=branchCount;treeLeaves.count=treeCount;
+treeCanopyUpper.count=treeCount;treeCanopySide.count=sideCanopyCount;
+for(const mesh of [treeTrunks,treeBranches,treeLeaves,treeCanopyUpper,treeCanopySide])mesh.instanceMatrix.needsUpdate=true;
+for(const mesh of [treeLeaves,treeCanopyUpper,treeCanopySide])if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
+scene.add(treeTrunks,treeBranches,treeLeaves,treeCanopyUpper,treeCanopySide);
 
 // 石材鉱床：集落から少し離れた丘陵に、探索して見つける採石候補地を生成する。
 const stoneDepositCenters=[];
@@ -840,26 +826,29 @@ scene.add(rocks);
 
 // 草むら：遠景の地面に細かな自然物を加える。InstancedMeshで描画負荷を抑える。
 const grassGeometry=new THREE.BufferGeometry();
-grassGeometry.setAttribute("position",new THREE.Float32BufferAttribute([
- 0,0,0, -0.055,0.24,0, 0.015,0.48,0.018,
- 0,0,0, 0.015,0.48,0.018, 0.055,0.23,0,
- 0,0,0, 0.055,0.23,0, 0.015,0.48,0.018
-],3));
-grassGeometry.computeVertexNormals();
-grassGeometry.computeBoundingSphere();
+// 3方向に広がる細い葉を1つの共有ジオメトリにまとめ、草株らしい立体感を出す。
+const bladeVertices=[];
+for(let b=0;b<5;b++){
+ const a=b*Math.PI/5,dx=Math.cos(a),dz=Math.sin(a),w=0.045+(b%2)*0.012,h=0.34+(b%3)*0.09;
+ const bx=dx*w,bz=dz*w,tx=dx*h*0.22,tz=dz*h*0.22;
+ bladeVertices.push(
+  -bz,0,bx, tx-bz*0.18,h,tz+bx*0.18, bz,0,-bx,
+  bz,0,-bx, tx-bz*0.18,h,tz+bx*0.18, tx+bz*0.18,h,tz-bx*0.18
+ );
+}
+grassGeometry.setAttribute("position",new THREE.Float32BufferAttribute(bladeVertices,3));
+grassGeometry.computeVertexNormals();grassGeometry.computeBoundingSphere();
 const grassMaterial=new THREE.MeshStandardMaterial({color:0x829653,roughness:1,side:THREE.DoubleSide});
 const grass=new THREE.InstancedMesh(grassGeometry,grassMaterial,1050);
 const grassDummy=new THREE.Object3D();
 let grassCount=0;
 for(let i=0;i<1050;i++){
- const x=(hash(i*17+31,SEED+91)-0.5)*WORLD_SIZE;
- const z=(hash(i*29+73,SEED+177)-0.5)*WORLD_SIZE;
- const d=terrainData(x,z);
+ const x=(hash(i*17+31,SEED+91)-0.5)*WORLD_SIZE,z=(hash(i*29+73,SEED+177)-0.5)*WORLD_SIZE,d=terrainData(x,z);
  if(!d.land||["sea","river","lake","beach","snow","mountain"].includes(d.kind))continue;
  if(!isStartingPlain(x,z)&&forestDensity(x,z)<0.08&&hash(i+991,SEED+7)>0.22)continue;
  grassDummy.position.set(x,d.height+0.2,z);
  const size=0.45+hash(i+41,SEED+13)*0.8;
- grassDummy.scale.set(size,size,size);
+ grassDummy.scale.set(size,size*(0.85+hash(i+43,SEED+15)*0.35),size);
  grassDummy.rotation.set(0,hash(i+57,SEED+19)*Math.PI*2,0);
  grassDummy.updateMatrix();grass.setMatrixAt(grassCount,grassDummy.matrix);
  const tint=new THREE.Color(d.moisture>0.65?0x77934a:0x9a9a55);
@@ -885,10 +874,10 @@ for(let i=0;i<280;i++){
  const scale=0.55+hash(i+601,SEED+501)*0.65;
  grassDummy.scale.set(scale*1.2,scale*0.72,scale);
  grassDummy.rotation.set(0,hash(i+701,SEED+601)*Math.PI,0);
- grassDummy.updateMatrix();bushes.setMatrixAt(bushCount++,grassDummy.matrix);
+ grassDummy.updateMatrix();bushes.setMatrixAt(bushCount,grassDummy.matrix);\n const bushTint=new THREE.Color(0x527443).multiplyScalar(0.82+hash(i+811,SEED+907)*0.34);\n bushes.setColorAt(bushCount,bushTint);bushCount++;
 }
 bushes.count=bushCount;bushes.instanceMatrix.needsUpdate=true;
-bushes.castShadow=false;scene.add(bushes);
+bushes.castShadow=false;if(bushes.instanceColor)bushes.instanceColor.needsUpdate=true;scene.add(bushes);
 
 // 雲：複数の球を組み合わせる
 const cloudMaterial=new THREE.MeshStandardMaterial({
