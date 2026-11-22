@@ -1258,13 +1258,14 @@ const roadCellSet=new Set();
 const residentGroup=new THREE.Group();
 scene.add(residentGroup);
 const residentAgents=[];
-const residentBodyGeometry=new THREE.CylinderGeometry(0.25,0.3,0.9,7);
-const residentHeadGeometry=new THREE.SphereGeometry(0.23,8,6);
-const residentLegGeometry=new THREE.CylinderGeometry(0.09,0.1,0.48,5);
-const residentArmGeometry=new THREE.CylinderGeometry(0.075,0.09,0.55,7);
-const residentHairGeometry=new THREE.SphereGeometry(0.235,9,7);
+// 住民の基本形状を滑らかなカプセル形状へ置き換え、近距離でも角張りすぎない体格にする。
+const residentBodyGeometry=new THREE.CapsuleGeometry(0.26,0.40,4,12);
+const residentHeadGeometry=new THREE.SphereGeometry(0.23,12,10);
+const residentLegGeometry=new THREE.CapsuleGeometry(0.085,0.30,3,9);
+const residentArmGeometry=new THREE.CapsuleGeometry(0.073,0.40,3,9);
+const residentHairGeometry=new THREE.SphereGeometry(0.235,12,10);
 const residentBootGeometry=new THREE.BoxGeometry(0.19,0.13,0.28);
-const residentColors=[0x527b9b,0x9b6847,0x718b55,0x8b719d,0xb08a45,0x547f78];
+const residentColors=[0x657b82,0x82624d,0x707b52,0x786b78,0x9a8050,0x54766e];
 let activeTool=null;
 let interactionMode="move"; // move: camera/build, select: choose a logical cell
 let selectedCell=null;
@@ -1911,7 +1912,7 @@ function syncResidentVisuals(){
  for(let i=0;i<visibleCount;i++){
   const group=new THREE.Group();
   const material=new THREE.MeshStandardMaterial({color:residentColors[i%residentColors.length],map:buildingTextures.fabric,roughness:0.96});
-  const skin=new THREE.MeshStandardMaterial({color:i%3===0?0xc99468:0xd8aa7d,roughness:0.95});
+  const skin=new THREE.MeshStandardMaterial({color:[0xc99468,0xd8aa7d,0xb98260,0xe0b895][i%4],roughness:0.96});
   const dark=new THREE.MeshStandardMaterial({color:0x443a32,roughness:1});
   const hair=new THREE.MeshStandardMaterial({color:[0x40352c,0x59412e,0x292b2b,0x72583e][i%4],roughness:1});
   const body=new THREE.Mesh(residentBodyGeometry,material);body.position.y=1.0;group.add(body);
@@ -1997,7 +1998,7 @@ function syncResidentVisuals(){
   const workPoint=workplace?{x:workplace.x+Math.cos(workAngle)*workRadius,z:workplace.z+Math.sin(workAngle)*workRadius}:homePoint;
   group.position.set(homePoint.x,terrainData(homePoint.x,homePoint.z).height,homePoint.z);
   group.scale.setScalar(0.82);
-  group.userData={homePoint,workPoint,homeBuildingId:home.id||null,workBuildingId:workplace?.id||null,atWork:false,clock:i*2.7,walkPhase:i*0.8,activityPhase:i*1.7,job:slot?.type||"idle",path:[],pathIndex:0,toolGroup};
+  group.userData={homePoint,workPoint,homeBuildingId:home.id||null,workBuildingId:workplace?.id||null,atWork:false,clock:i*2.7,walkPhase:i*0.8,activityPhase:i*1.7,job:slot?.type||"idle",path:[],pathIndex:0,toolGroup,leftLeg,rightLeg,leftArm,rightArm};
   residentGroup.add(group);residentAgents.push(group);
  }
 }
@@ -2030,10 +2031,11 @@ function updateResidentLife(delta){
   const idleSway=data.job==="idle"?0.07:0.025;
   const swing=moving?Math.sin(data.walkPhase)*0.42:Math.sin(data.walkPhase)*idleSway;
   const workSwing=working?Math.sin(data.activityPhase)*(data.job==="farm"?0.28:0.72):0;
-  person.children[2].rotation.x=swing+(working&&data.job==="farm"?0.12:0);
-  person.children[3].rotation.x=-swing+workSwing;
-  person.children[4].rotation.x=-swing*0.65-workSwing*0.55;
-  person.children[5].rotation.x=swing*0.65;
+  // 歩行時は脚と腕を逆位相で振り、作業時は道具を持つ腕を中心に動かす。
+  if(data.leftLeg)data.leftLeg.rotation.x=swing+(working&&data.job==="farm"?0.12:0);
+  if(data.rightLeg)data.rightLeg.rotation.x=-swing+workSwing*0.55;
+  if(data.leftArm)data.leftArm.rotation.x=-swing*0.55;
+  if(data.rightArm)data.rightArm.rotation.x=swing*0.55+workSwing*0.28;
   person.children[0].rotation.x=working?(data.job==="farm"?0.12:Math.max(0,Math.sin(data.activityPhase))*0.16):0;
   if(data.toolGroup)data.toolGroup.rotation.z=working?(data.job==="farm"?Math.sin(data.activityPhase)*0.18:-Math.max(0,Math.sin(data.activityPhase))*0.85):0;
   person.position.y=terrainData(person.position.x,person.position.z).height+(moving?Math.abs(Math.sin(data.walkPhase))*0.06:0);
