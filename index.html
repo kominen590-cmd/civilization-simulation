@@ -1352,6 +1352,42 @@ function buildMenu(){
  });
  root.appendChild(roadButton);
 }
+// 建築・道路で共用する、軽量な手続き型表面テクスチャ
+function makeSurfaceTexture(kind){
+ const size=64,pixels=new Uint8Array(size*size*4);
+ for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+  const n=hash(x*1.7+(kind.length*13),y*2.1+kind.length*7);
+  const grain=kind==="wood"?(Math.sin(y*1.9+Math.sin(x*0.32)*2)+1)*0.5:
+   kind==="roof"?(Math.sin((y+Math.floor(x/8)*2)*1.25)+1)*0.5:
+   kind==="stone"?(Math.sin(x*0.7+y*0.43)+1)*0.5:n;
+  const v=0.72+n*0.22+grain*0.12,k=(y*size+x)*4;
+  let c;
+  if(kind==="wood")c=[112,75,45];
+  else if(kind==="roof")c=[91,57,43];
+  else if(kind==="stone")c=[137,137,126];
+  else if(kind==="dirt")c=[119,91,61];
+  else c=[190,178,151];
+  pixels[k]=Math.min(255,c[0]*v);pixels[k+1]=Math.min(255,c[1]*v);
+  pixels[k+2]=Math.min(255,c[2]*v);pixels[k+3]=255;
+ }
+ const texture=new THREE.DataTexture(pixels,size,size,THREE.RGBAFormat);
+ texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
+ texture.colorSpace=THREE.SRGBColorSpace;
+ texture.needsUpdate=true;
+ return texture;
+}
+const buildingTextures={
+ wood:makeSurfaceTexture("wood"),roof:makeSurfaceTexture("roof"),
+ stone:makeSurfaceTexture("stone"),dirt:makeSurfaceTexture("dirt"),
+ plaster:makeSurfaceTexture("plaster")
+};
+const buildingMaterials={
+ wood:new THREE.MeshStandardMaterial({color:0xffffff,map:buildingTextures.wood,bumpMap:buildingTextures.wood,bumpScale:0.045,roughness:0.9}),
+ roof:new THREE.MeshStandardMaterial({color:0xffffff,map:buildingTextures.roof,bumpMap:buildingTextures.roof,bumpScale:0.065,roughness:0.96}),
+ stone:new THREE.MeshStandardMaterial({color:0xffffff,map:buildingTextures.stone,bumpMap:buildingTextures.stone,bumpScale:0.055,roughness:0.98}),
+ dirt:new THREE.MeshStandardMaterial({color:0xffffff,map:buildingTextures.dirt,bumpMap:buildingTextures.dirt,bumpScale:0.035,roughness:1}),
+ plaster:new THREE.MeshStandardMaterial({color:0xffffff,map:buildingTextures.plaster,bumpMap:buildingTextures.plaster,bumpScale:0.025,roughness:0.97})
+};
 function makeBuildingMesh(type,x,z){
  const b=buildingTypes[type];
  const group=new THREE.Group();
@@ -1360,29 +1396,37 @@ function makeBuildingMesh(type,x,z){
  const footprint=CELL*size*0.88;
  const base=new THREE.Mesh(
   new THREE.BoxGeometry(footprint,0.45,footprint),
-  new THREE.MeshStandardMaterial({color:0x615a49,roughness:1})
+  buildingMaterials.stone
  );
  base.position.y=baseY+0.22;group.add(base);
  const height=type==="hut"?2.5:type==="store"?2.1:type==="farm"?0.35:type==="well"?0.8:type==="plaza"?0.18:1.5;
  const body=new THREE.Mesh(
   new THREE.BoxGeometry(footprint*0.82,height,footprint*0.82),
-  new THREE.MeshStandardMaterial({color:b.color,roughness:0.92})
+  buildingMaterials.plaster
  );
  body.position.y=baseY+0.45+height/2;group.add(body);
  if(type==="hut"||type==="store"){
-  const roof=new THREE.Mesh(new THREE.ConeGeometry(footprint*0.70,1.28,4),
-   new THREE.MeshStandardMaterial({color:type==="hut"?0x70452f:0x625044,roughness:0.88}));
-  roof.position.set(0,baseY+0.45+height+0.58,0);
-  roof.rotation.y=Math.PI/4;roof.castShadow=true;roof.receiveShadow=true;group.add(roof);
+  // 切妻屋根：左右の屋根面、棟木、軒先を分けて実際の屋根構造に近づける。
+  const roofY=baseY+0.45+height+0.28,roofAngle=0.57;
+  for(const side of [-1,1]){
+   const panel=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.59,0.16,footprint*1.08),buildingMaterials.roof);
+   panel.position.set(side*footprint*0.245,roofY+0.20,0);
+   panel.rotation.z=side*roofAngle;panel.castShadow=true;panel.receiveShadow=true;group.add(panel);
+   const fascia=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.22,footprint*1.10),buildingMaterials.wood);
+   fascia.position.set(side*footprint*0.49,roofY-0.01,0);
+   fascia.rotation.z=side*roofAngle;group.add(fascia);
+  }
+  const ridge=new THREE.Mesh(new THREE.CylinderGeometry(0.10,0.10,footprint*1.12,8),buildingMaterials.wood);
+  ridge.rotation.x=Math.PI/2;ridge.position.set(0,roofY+0.49,0);group.add(ridge);
   // 正面の木製扉と小窓で建物の縮尺・生活感を補う。
   const frontZ=footprint*0.82*0.5+0.012;
-  const door=new THREE.Mesh(new THREE.BoxGeometry(0.42,0.88,0.07),new THREE.MeshStandardMaterial({color:0x493326,roughness:0.92}));
+  const door=new THREE.Mesh(new THREE.BoxGeometry(0.42,0.88,0.07),buildingMaterials.wood);
   door.position.set(0,baseY+0.45+0.44,frontZ);group.add(door);
   const windowMat=new THREE.MeshStandardMaterial({color:0x8fa7a2,roughness:0.38,metalness:0.08});
   for(const side of [-1,1]){
    const windowMesh=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.34,0.055),windowMat);
    windowMesh.position.set(side*footprint*0.23,baseY+0.45+height*0.64,frontZ);group.add(windowMesh);
-   const cross=new THREE.Mesh(new THREE.BoxGeometry(0.045,0.36,0.065),new THREE.MeshStandardMaterial({color:0x493326,roughness:1}));
+   const cross=new THREE.Mesh(new THREE.BoxGeometry(0.045,0.36,0.065),buildingMaterials.wood);
    cross.position.copy(windowMesh.position);group.add(cross);
   }
  }
@@ -1390,7 +1434,7 @@ function makeBuildingMesh(type,x,z){
   const cropPlants=[];
   for(let rowIndex=0;rowIndex<4;rowIndex++){
    const rowZ=(rowIndex-1.5)*0.55;
-   const soil=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.74,0.16,0.34),new THREE.MeshStandardMaterial({color:0x71543a,roughness:1}));
+   const soil=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.74,0.16,0.34),buildingMaterials.dirt);
    soil.position.set(0,baseY+0.55,rowZ);group.add(soil);
    const row=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.72,0.09,0.13),new THREE.MeshStandardMaterial({color:0x526c36,roughness:1}));
    row.position.set(0,baseY+0.66,rowZ);group.add(row);
@@ -1405,7 +1449,7 @@ function makeBuildingMesh(type,x,z){
     plant.position.set((plantIndex-2.5)*0.42,baseY+0.62,rowZ);plant.scale.y=0.08;group.add(plant);cropPlants.push(plant);
    }
   }
-  const fenceMat=new THREE.MeshStandardMaterial({color:0x795638,roughness:1});
+  const fenceMat=buildingMaterials.wood;
   for(const side of [-1,1]){
    for(let post=0;post<5;post++){
     const fencePost=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.62,0.11),fenceMat);
@@ -1419,7 +1463,7 @@ function makeBuildingMesh(type,x,z){
   group.userData.cropPlants=cropPlants;
  }
  if(type==="woodcutter"){
-  const woodMat=new THREE.MeshStandardMaterial({color:0x79502e,roughness:1});
+  const woodMat=buildingMaterials.wood;
   for(let pile=0;pile<2;pile++)for(let log=0;log<3;log++){
    const timber=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,0.85,9),woodMat);
    timber.rotation.z=Math.PI/2;timber.position.set((log-1)*0.19,baseY+0.62+pile*0.22,footprint*0.47+0.55+pile*0.12);group.add(timber);
@@ -1427,12 +1471,12 @@ function makeBuildingMesh(type,x,z){
    cutEnd.position.set((log-1)*0.19+0.43,baseY+0.62+pile*0.22,footprint*0.47+0.55+pile*0.12);
    cutEnd.rotation.y=Math.PI/2;group.add(cutEnd);
   }
-  const awning=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.72,0.16,0.62),new THREE.MeshStandardMaterial({color:0x76583a,roughness:1}));
+  const awning=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.72,0.16,0.62),buildingMaterials.roof);
   awning.position.set(0,baseY+1.95,footprint*0.35);group.add(awning);
  }
  if(type==="quarry"){
-  const stoneMat=new THREE.MeshStandardMaterial({color:0x777970,roughness:1});
-  const timberMat=new THREE.MeshStandardMaterial({color:0x65462e,roughness:1});
+  const stoneMat=buildingMaterials.stone;
+  const timberMat=buildingMaterials.wood;
   for(let rock=0;rock<10;rock++){
    const size=0.18+(rock%4)*0.075,chunk=new THREE.Mesh(new THREE.DodecahedronGeometry(size,1),stoneMat),angle=rock*Math.PI*2/10;
    chunk.position.set(Math.cos(angle)*(footprint*0.48+0.35),baseY+0.52+size*0.3,Math.sin(angle)*(footprint*0.48+0.35));
@@ -1446,7 +1490,7 @@ function makeBuildingMesh(type,x,z){
   lintel.position.set(0,baseY+1.68,footprint*0.38);group.add(lintel);
  }
  if(type==="well"){
-  const stone=new THREE.MeshStandardMaterial({color:0x8d918b,roughness:1});
+  const stone=buildingMaterials.stone;
   const darkWater=new THREE.MeshStandardMaterial({color:0x315f70,roughness:0.22});
   const rim=new THREE.Mesh(new THREE.CylinderGeometry(0.72,0.78,0.38,12),stone);
   rim.position.y=baseY+0.55;group.add(rim);
@@ -1464,7 +1508,7 @@ function makeBuildingMesh(type,x,z){
  }
  if(type==="plaza"){
   const stone=new THREE.MeshStandardMaterial({color:0xa9a28f,roughness:1});
-  const wood=new THREE.MeshStandardMaterial({color:0x684a32,roughness:1});
+  const wood=buildingMaterials.wood;
   for(let n=0;n<4;n++){
    const tile=new THREE.Mesh(new THREE.BoxGeometry(0.88,0.08,0.88),stone);
    tile.position.set((n%2-0.5)*0.94,baseY+0.53,(Math.floor(n/2)-0.5)*0.94);group.add(tile);
@@ -1483,7 +1527,7 @@ function makeBuildingMesh(type,x,z){
   shrub.position.set(0,baseY+1.12,0);group.add(shrub);
  }
  if(type==="hut"||type==="store"){
-  const chimney=new THREE.Mesh(new THREE.BoxGeometry(0.32,1.05,0.32),new THREE.MeshStandardMaterial({color:0x77746b,roughness:1}));
+  const chimney=new THREE.Mesh(new THREE.BoxGeometry(0.32,1.05,0.32),buildingMaterials.stone);
   chimney.position.set(footprint*0.24,baseY+0.45+height+0.8,-footprint*0.22);group.add(chimney);
   const frameMat=new THREE.MeshStandardMaterial({color:0x503b2b,roughness:1});
   const frameFrontZ=footprint*0.82*0.5+0.012;
@@ -1544,14 +1588,20 @@ function isRoadCellValid(ix,iz){
  if(treeLocations.some(p=>p.x>x0+0.2&&p.x<x1-0.2&&p.z>z0+0.2&&p.z<z1-0.2)||rockLocations.some(p=>p.x>x0+0.2&&p.x<x1-0.2&&p.z>z0+0.2&&p.z<z1-0.2))return false;
  return true;
 }
-const roadSurfaceMat=new THREE.MeshStandardMaterial({color:0x927b59,roughness:1});
-const roadRutsMat=new THREE.MeshStandardMaterial({color:0x665b45,roughness:1});
-const roadStoneMat=new THREE.MeshStandardMaterial({color:0xb3a58a,roughness:1});
+const roadSurfaceMat=new THREE.MeshStandardMaterial({color:0xffffff,map:buildingTextures.dirt,bumpMap:buildingTextures.dirt,bumpScale:0.055,roughness:1});
+const roadRutsMat=new THREE.MeshStandardMaterial({color:0x554735,map:buildingTextures.dirt,bumpMap:buildingTextures.dirt,bumpScale:0.025,roughness:1});
+const roadStoneMat=buildingMaterials.stone;
 function addRoadMesh(ix,iz){
  const center=cellWorldCenter("hut",ix,iz),y=terrainData(center.x,center.z).height+0.09;
  const tile=new THREE.Group();
- const mesh=new THREE.Mesh(new THREE.BoxGeometry(CELL*0.84,0.12,CELL*0.84),roadSurfaceMat);
- mesh.receiveShadow=true;tile.add(mesh);
+ const roadShape=new THREE.Shape();
+ roadShape.moveTo(-1.72,-1.35);roadShape.lineTo(-1.35,-1.68);
+ roadShape.lineTo(1.42,-1.55);roadShape.lineTo(1.73,-1.16);
+ roadShape.lineTo(1.58,1.38);roadShape.lineTo(1.18,1.68);
+ roadShape.lineTo(-1.48,1.53);roadShape.lineTo(-1.72,1.12);roadShape.closePath();
+ const roadGeometry=new THREE.ShapeGeometry(roadShape,2);roadGeometry.rotateX(-Math.PI/2);
+ const mesh=new THREE.Mesh(roadGeometry,roadSurfaceMat);
+ mesh.position.y=0.055;mesh.receiveShadow=true;tile.add(mesh);
  for(const side of [-1,1]){
   const rut=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.025,CELL*0.72),roadRutsMat);
   rut.position.set(side*0.48,0.071,0);tile.add(rut);
