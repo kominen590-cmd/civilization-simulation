@@ -404,6 +404,12 @@ function lakeDistance(x,z){
 }
 
 // 地形の基本標高
+// 大陸内に広い平原帯を作る低周波ノイズ。値は連続的に変化し、地形の境目を自然につなぐ。
+function plainsStrength(x,z){
+ const field=noise(x+2140,z-1630,76)*0.62+noise(x-870,z+1240,34)*0.38;
+ return smooth(THREE.MathUtils.clamp((field-0.39)/0.31,0,1));
+}
+
 function baseHeight(x,z){
  if(isStartingPlain(x,z))return 0.5;
  const score=landScore(x,z);
@@ -412,6 +418,7 @@ function baseHeight(x,z){
  const coast=THREE.MathUtils.clamp(score/0.35,0,1);
  const broad=fbm(x+500,z+500);
  const detail=noise(x,z,9);
+ const plains=plainsStrength(x,z);
 
  let height=0.5+coast*(2+broad*3.2+detail*1.1);
 
@@ -426,12 +433,12 @@ function baseHeight(x,z){
   (mountainRegion-0.39)*2.1,0,1
  );
 
- height+=mountainStrength*17*coast;
- height+=Math.max(0,broad-0.69)*13*coast;
+ height+=mountainStrength*17*coast*(1-plains*0.94);
+ height+=Math.max(0,broad-0.69)*13*coast*(1-plains*0.90);
 
  // 丘陵
  const hills=noise(x-250,z+600,23);
- height+=Math.max(0,hills-0.52)*7*coast;
+ height+=Math.max(0,hills-0.52)*7*coast*(1-plains*0.82);
 
  // 湖のくぼみ
  const ld=lakeDistance(x,z);
@@ -439,6 +446,10 @@ function baseHeight(x,z){
   const depression=(1-smooth(THREE.MathUtils.clamp(ld/1.5,0,1)));
   height-=depression*2.8;
  }
+
+ // 平原帯は標高を低く安定させ、周辺の丘陵・山岳へ滑らかにつなぐ。
+ const plainHeight=1.15+noise(x-1910,z+740,25)*1.35;
+ height=THREE.MathUtils.lerp(height,plainHeight,plains*0.94);
 
  // 海岸の砂浜
  if(score<0.18)height=Math.min(height,0.65);
@@ -493,11 +504,12 @@ function riverDistance(x,z){
 }
 
 function terrainData(x,z){
- if(isStartingPlain(x,z))return {land:true,height:0.5,kind:"plain",moisture:0.55,temperature:0.75};
+ if(isStartingPlain(x,z))return {land:true,height:0.5,kind:"plain",moisture:0.55,temperature:0.75,plains:1};
  const score=landScore(x,z);
  const land=score>0.02;
- if(!land)return {land:false,height:-1.2,kind:"sea"};
+ if(!land)return {land:false,height:-1.2,kind:"sea",plains:0};
 
+ const plains=plainsStrength(x,z);
  let height=baseHeight(x,z);
  const river=riverDistance(x,z);
  const riverCut=Math.exp(-Math.pow(river/2.5,2));
@@ -516,7 +528,7 @@ function terrainData(x,z){
  else if(moisture<0.25)kind="dry";
  else if(moisture>0.76)kind="wetland";
 
- return {land:true,height,kind,moisture,temperature};
+ return {land:true,height,kind,moisture,temperature,plains};
 }
 
 // 地形メッシュ
@@ -666,7 +678,7 @@ for(let i=0;i<MAX_TREES;i++){
  if(data.temperature<0.12||moisture<0.18)continue;
  if(density<0.15&&random()>0.12)continue;
  if(broad<0.30)continue;
- if(random()>0.42+density*0.43)continue;
+ if(random()>(0.42+density*0.43)*(1-data.plains*0.68))continue;
 
  const scale=0.7+random()*0.65;
  const y=data.height;
