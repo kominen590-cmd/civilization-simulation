@@ -448,7 +448,7 @@ function baseHeight(x,z){
  }
 
  // 平原帯は標高を低く安定させ、周辺の丘陵・山岳へ滑らかにつなぐ。
- const plainHeight=1.15+noise(x-1910,z+740,25)*1.35;
+ const plainHeight=1.0+noise(x-1910,z+740,52)*0.55+noise(x+630,z-420,18)*0.28;
  height=THREE.MathUtils.lerp(height,plainHeight,plains*0.94);
 
  // 海岸の砂浜
@@ -678,7 +678,8 @@ for(let i=0;i<MAX_TREES;i++){
  if(data.temperature<0.12||moisture<0.18)continue;
  if(density<0.15&&random()>0.12)continue;
  if(broad<0.30)continue;
- if(random()>(0.42+density*0.43)*(1-data.plains*0.68))continue;
+ // 平原にも木立を残すが、群落の中心に寄せて建設用の開けた場所を確保する。
+ if(random()>(0.20+density*0.60)*(1-data.plains*0.35))continue;
 
  const scale=0.7+random()*0.65;
  const y=data.height;
