@@ -456,8 +456,11 @@ function lakeDistance(x,z){
  return best;
 }
 
-// 地形の基本標高
-// 大陸内に広い平原帯を作る低周波ノイズ。値は連続的に変化し、地形の境目を自然につなぐ。
+// 地形の基本標高。通常地形は2.5単位ごとのひな壇状に整える。
+const TERRACE_STEP=2.5;
+const WATER_LEVEL=0.35;
+function terraceHeight(value){return 0.5+Math.round((value-0.5)/TERRACE_STEP)*TERRACE_STEP;}
+// 大陸内に広い平原帯を作る低周波ノイズ。
 function plainsStrength(x,z){
  const field=noise(x+2140,z-1630,76)*0.62+noise(x-870,z+1240,34)*0.38;
  return smooth(THREE.MathUtils.clamp((field-0.39)/0.31,0,1));
@@ -520,7 +523,8 @@ function baseHeight(x,z){
  // 海岸の砂浜
  if(score<0.18)height=Math.min(height,0.65);
 
- return height;
+ // 高さを一定間隔に丸め、広い平坦面と明確な段差を作る。
+ return terraceHeight(height);
 }
 
 // 川の候補経路
@@ -573,20 +577,18 @@ function terrainData(x,z){
  if(isStartingPlain(x,z))return {land:true,height:0.5,kind:"plain",moisture:0.55,temperature:0.75,plains:1};
  const score=landScore(x,z);
  const land=score>0.02;
- if(!land)return {land:false,height:-1.2,kind:"sea",plains:0};
+ if(!land)return {land:false,water:true,height:-1.2,kind:"sea",plains:0};
 
  const plains=plainsStrength(x,z);
  let height=baseHeight(x,z);
  const river=riverDistance(x,z);
- const riverCut=Math.exp(-Math.pow(river/2.5,2));
- height-=riverCut*1.8;
 
  const moisture=moistureAt(x,z);
  const temperature=temperatureAt(x,z,height);
  let kind="plain";
 
  if(lakeDistance(x,z)<1)kind="lake";
- else if(river<1.8)kind="river";
+ else if(river<1.25)kind="river";
  else if(score<0.18)kind="beach";
  else if(height>18||(temperature<0.16&&height>5))kind="snow";
  else if(height>13)kind="mountain";
@@ -594,7 +596,9 @@ function terrainData(x,z){
  else if(moisture<0.25)kind="dry";
  else if(moisture>0.76)kind="wetland";
 
- return {land:true,height,kind,moisture,temperature,plains};
+ const water=kind==="lake"||kind==="river";
+ if(water)height=WATER_LEVEL;
+ return {land:!water,water,height,kind,moisture,temperature,plains};
 }
 
 // 地形メッシュ
@@ -700,12 +704,12 @@ for(const lake of lakes){
 
  const shore=new THREE.Mesh(new THREE.RingGeometry(0.78,1.02,48),new THREE.MeshStandardMaterial({color:0xb4a477,roughness:1}));
  shore.rotation.x=-Math.PI/2;
- shore.position.set(lake.x,baseHeight(lake.x,lake.z)+1.13,lake.z);
+ shore.position.set(lake.x,WATER_LEVEL+0.015,lake.z);
  shore.scale.set(lake.rx*0.84,lake.rz*0.84,1);
  scene.add(shore);
  const mesh=new THREE.Mesh(new THREE.CircleGeometry(1,48),lakeMaterial);
  mesh.rotation.x=-Math.PI/2;
- mesh.position.set(lake.x,baseHeight(lake.x,lake.z)+1.25,lake.z);
+ mesh.position.set(lake.x,WATER_LEVEL+0.035,lake.z);
  mesh.scale.set(lake.rx*0.82,lake.rz*0.82,1);
  scene.add(mesh);
 }
@@ -733,8 +737,8 @@ for(const curve of riverCurves){
 
  for(const points of segments){
   const c=new THREE.CatmullRomCurve3(points);
-  const bank=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),1.02,7,false),new THREE.MeshStandardMaterial({color:0x8e9970,roughness:1}));
-  const mesh=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),0.62,9,false),riverMaterial);
+  const bank=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),1.45,7,false),new THREE.MeshStandardMaterial({color:0x8e9970,roughness:1}));
+  const mesh=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),1.02,9,false),riverMaterial);
   scene.add(bank,mesh);
  }
 }
@@ -1101,8 +1105,8 @@ function footprintTerrainValid(type,x,z){
   if(!d.land||["river","lake","snow","mountain"].includes(d.kind))return false;
  }
  const profile=footprintTerrainProfile(type,x,z);
- const limit=type==="farm"?1.0:type==="quarry"?2.0:1.5;
- return profile.grade<=limit;
+ // 建物の敷地全体が同じ段の平地に収まる場合だけ配置可能。
+ return profile.grade<=0.12;
 }
 function footprintNaturalClear(type,x,z){
  const size=buildingTypes[type]?.size||1,a=cellAnchor(type,x,z);
@@ -1753,7 +1757,7 @@ function isRoadCellValid(ix,iz){
  if(!terrain.land||["river","lake","snow","mountain","sea"].includes(terrain.kind))return false;
  const corners=[[GRID_ORIGIN+ix*CELL,GRID_ORIGIN+iz*CELL],[GRID_ORIGIN+(ix+1)*CELL,GRID_ORIGIN+iz*CELL],[GRID_ORIGIN+(ix+1)*CELL,GRID_ORIGIN+(iz+1)*CELL],[GRID_ORIGIN+ix*CELL,GRID_ORIGIN+(iz+1)*CELL]];
  const heights=corners.map(p=>terrainData(p[0],p[1]).height);
- if(Math.max(...heights)-Math.min(...heights)>2.2)return false;
+ if(Math.max(...heights)-Math.min(...heights)>0.12)return false;
  const key=ix+","+iz,x0=GRID_ORIGIN+ix*CELL,z0=GRID_ORIGIN+iz*CELL,x1=x0+CELL,z1=z0+CELL;
  if(gameState.buildings.some(b=>footprintCellKeys(b.type,b.x,b.z).includes(key)))return false;
  if(treeLocations.some(p=>p.x>x0+0.2&&p.x<x1-0.2&&p.z>z0+0.2&&p.z<z1-0.2)||rockLocations.some(p=>p.x>x0+0.2&&p.x<x1-0.2&&p.z>z0+0.2&&p.z<z1-0.2))return false;
