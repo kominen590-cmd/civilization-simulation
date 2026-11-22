@@ -645,41 +645,60 @@ for(let i=0;i<positions.count;i++){
 geometry.setAttribute("color",new THREE.Float32BufferAttribute(colors,3));
 geometry.computeVertexNormals();
 
-// 微細な土・草地の凹凸を共有テクスチャで表現。画像ファイルを増やさず端末負荷を抑える。
-const surfacePixels=new Uint8Array(128*128*4);
-for(let py=0;py<128;py++)for(let px=0;px<128;px++){
- const n1=hash(px*1.7,py*1.9),n2=hash(px*4.3+17,py*3.7-9);
- const ripple=(Math.sin(px*0.19+Math.sin(py*0.07)*2)+Math.sin(py*0.16+Math.cos(px*0.05)*2))*5;
- const v=Math.round(112+n1*70+n2*35+ripple),k=(py*128+px)*4;
- surfacePixels[k]=v;surfacePixels[k+1]=v;surfacePixels[k+2]=v;surfacePixels[k+3]=255;
+// 地面の質感：タイル境界が目立たない多段階ノイズで、草・土・小石の微細な起伏を表現。
+function tileNoise(x,y,cell,period){
+ const count=period/cell,fx=x/cell,fy=y/cell,ix=Math.floor(fx),iy=Math.floor(fy);
+ const tx=smooth(fx-ix),ty=smooth(fy-iy);
+ const wrap=n=>((n%count)+count)%count;
+ const a=hash(wrap(ix)*1.0,wrap(iy)*1.0),b=hash(wrap(ix+1)*1.0,wrap(iy)*1.0);
+ const c=hash(wrap(ix)*1.0,wrap(iy+1)*1.0),d=hash(wrap(ix+1)*1.0,wrap(iy+1)*1.0);
+ return THREE.MathUtils.lerp(THREE.MathUtils.lerp(a,b,tx),THREE.MathUtils.lerp(c,d,tx),ty);
 }
-const surfaceBump=new THREE.DataTexture(surfacePixels,128,128,THREE.RGBAFormat);
+const BUMP_SIZE=256;
+const surfacePixels=new Uint8Array(BUMP_SIZE*BUMP_SIZE*4);
+for(let py=0;py<BUMP_SIZE;py++)for(let px=0;px<BUMP_SIZE;px++){
+ const broad=tileNoise(px,py,64,BUMP_SIZE);
+ const middle=tileNoise(px,py,16,BUMP_SIZE);
+ const fine=tileNoise(px,py,4,BUMP_SIZE);
+ const grain=hash((px+71)%BUMP_SIZE,(py-113+BUMP_SIZE)%BUMP_SIZE);
+ const value=Math.round(116+broad*30+middle*34+fine*24+grain*12);
+ const k=(py*BUMP_SIZE+px)*4;
+ surfacePixels[k]=value;surfacePixels[k+1]=value;surfacePixels[k+2]=value;surfacePixels[k+3]=255;
+}
+const surfaceBump=new THREE.DataTexture(surfacePixels,BUMP_SIZE,BUMP_SIZE,THREE.RGBAFormat);
 surfaceBump.wrapS=surfaceBump.wrapT=THREE.RepeatWrapping;
-surfaceBump.repeat.set(54,54);
+surfaceBump.repeat.set(18,18);
 surfaceBump.colorSpace=THREE.NoColorSpace;
+surfaceBump.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
 surfaceBump.needsUpdate=true;
 
-// 地面の色むら用テクスチャ。頂点カラーのバイオーム色を保ちながら、土・草地に微細な自然変化を重ねる。
-const terrainColorPixels=new Uint8Array(256*256*4);
-for(let py=0;py<256;py++)for(let px=0;px<256;px++){
- const broad=hash(px*0.8+29,py*0.8-13),grain=hash(px*3.7+101,py*4.1-67);
- const fleck=hash(Math.floor(px/3)*1.9,Math.floor(py/3)*2.1);
- const value=Math.round(222+broad*20+grain*12+(fleck>0.86?8:0));
- const k=(py*256+px)*4;
- terrainColorPixels[k]=value;terrainColorPixels[k+1]=value;terrainColorPixels[k+2]=value;terrainColorPixels[k+3]=255;
+// 頂点カラーを壊さない中立色の地表テクスチャ。土粒・草の色むらを複数スケールで重ねる。
+const COLOR_SIZE=512;
+const terrainColorPixels=new Uint8Array(COLOR_SIZE*COLOR_SIZE*4);
+for(let py=0;py<COLOR_SIZE;py++)for(let px=0;px<COLOR_SIZE;px++){
+ const broad=tileNoise(px,py,128,COLOR_SIZE);
+ const patch=tileNoise(px,py,32,COLOR_SIZE);
+ const grain=tileNoise(px,py,8,COLOR_SIZE);
+ const fleck=hash((px+1201)%COLOR_SIZE,(py-907+COLOR_SIZE)%COLOR_SIZE);
+ const soil=patch>0.67?1:0;
+ const r=Math.round(216+broad*8+patch*10+grain*7+(fleck>0.965?12:0)+soil*2);
+ const g=Math.round(218+broad*9+patch*9+grain*8+(fleck>0.965?10:0)-soil*3);
+ const b=Math.round(211+broad*7+patch*7+grain*6+(fleck>0.965?8:0)-soil*5);
+ const k=(py*COLOR_SIZE+px)*4;
+ terrainColorPixels[k]=r;terrainColorPixels[k+1]=g;terrainColorPixels[k+2]=b;terrainColorPixels[k+3]=255;
 }
-const terrainColorTexture=new THREE.DataTexture(terrainColorPixels,256,256,THREE.RGBAFormat);
+const terrainColorTexture=new THREE.DataTexture(terrainColorPixels,COLOR_SIZE,COLOR_SIZE,THREE.RGBAFormat);
 terrainColorTexture.wrapS=terrainColorTexture.wrapT=THREE.RepeatWrapping;
-terrainColorTexture.repeat.set(48,48);
+terrainColorTexture.repeat.set(14,14);
 terrainColorTexture.colorSpace=THREE.SRGBColorSpace;
-terrainColorTexture.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
+terrainColorTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 terrainColorTexture.needsUpdate=true;
 
 const terrain=new THREE.Mesh(
  geometry,
  new THREE.MeshStandardMaterial({
   vertexColors:true,map:terrainColorTexture,roughness:0.98,metalness:0,
-  bumpMap:surfaceBump,bumpScale:0.105
+  bumpMap:surfaceBump,bumpScale:0.075
  })
 );
 terrain.receiveShadow=true;
