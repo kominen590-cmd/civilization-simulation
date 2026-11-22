@@ -922,13 +922,35 @@ function revealAroundCamera(){
  }
 }
 function clampCameraToWorld(){
- const limit=HALF-2;
+ const worldLimit=HALF-2;
  const oldX=camera.position.x,oldZ=camera.position.z;
- camera.position.x=THREE.MathUtils.clamp(oldX,-limit,limit);
- camera.position.z=THREE.MathUtils.clamp(oldZ,-limit,limit);
- const shiftX=camera.position.x-oldX,shiftZ=camera.position.z-oldZ;
- controls.target.x=THREE.MathUtils.clamp(controls.target.x+shiftX,-limit,limit);
- controls.target.z=THREE.MathUtils.clamp(controls.target.z+shiftZ,-limit,limit);
+ camera.position.x=THREE.MathUtils.clamp(oldX,-worldLimit,worldLimit);
+ camera.position.z=THREE.MathUtils.clamp(oldZ,-worldLimit,worldLimit);
+ let targetX=controls.target.x+(camera.position.x-oldX);
+ let targetZ=controls.target.z+(camera.position.z-oldZ);
+ if(gameStarted&&exploredCellSet.size){
+  let minX=GRID_CELLS,maxX=0,minZ=GRID_CELLS,maxZ=0;
+  for(const key of exploredCellSet){
+   const parts=key.split(",");
+   const ix=Number(parts[0]),iz=Number(parts[1]);
+   if(!Number.isInteger(ix)||!Number.isInteger(iz)||ix<0||iz<0||ix>=GRID_CELLS||iz>=GRID_CELLS)continue;
+   minX=Math.min(minX,ix);maxX=Math.max(maxX,ix);
+   minZ=Math.min(minZ,iz);maxZ=Math.max(maxZ,iz);
+  }
+  if(minX<=maxX&&minZ<=maxZ){
+   // 探索済みの境界から最大3マス先まで移動可能。到達すると周囲の霧が晴れ、行動範囲も広がる。
+   const scout=EXPLORATION_RADIUS;
+   const minWorldX=GRID_ORIGIN+(minX-scout)*CELL;
+   const maxWorldX=GRID_ORIGIN+(maxX+1+scout)*CELL;
+   const minWorldZ=GRID_ORIGIN+(minZ-scout)*CELL;
+   const maxWorldZ=GRID_ORIGIN+(maxZ+1+scout)*CELL;
+   targetX=THREE.MathUtils.clamp(targetX,minWorldX,maxWorldX);
+   targetZ=THREE.MathUtils.clamp(targetZ,minWorldZ,maxWorldZ);
+  }
+ }
+ const shiftX=targetX-controls.target.x,shiftZ=targetZ-controls.target.z;
+ controls.target.x=targetX;controls.target.z=targetZ;
+ camera.position.x+=shiftX;camera.position.z+=shiftZ;
 }
 const START_GOALS=[
  {id:"survey",title:"周囲の土地を確認する",hint:"選択モードに切り替え、発見済みの草原マスをタップして地形と資源を確認しましょう。",done:()=>gameState.firstCellSelected},
