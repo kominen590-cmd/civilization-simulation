@@ -846,7 +846,7 @@ function resourcePlacementCheck(type,x,z){
 }
 const gameState={
  day:1,year:1,season:0,paused:false,elapsed:0,workforceByType:{farm:0,woodcutter:0,quarry:0,well:0},
- firstCellSelected:false,completedStartGoals:[],exploredCells:[],
+ firstCellSelected:false,completedStartGoals:[],exploredCells:[],roads:[],
  population:5,money:120,food:80,wood:35,stone:15,
  housing:8,workers:4,employed:0,happiness:55,buildings:[],selected:null,
  nextId:1,foodProduced:0,woodProduced:0,stoneProduced:0,
@@ -974,6 +974,9 @@ let gameStarted=false;
 const buildingMeshes=new Map();
 const buildingGroup=new THREE.Group();
 scene.add(buildingGroup);
+const roadGroup=new THREE.Group();
+scene.add(roadGroup);
+const roadCellSet=new Set();
 const residentGroup=new THREE.Group();
 scene.add(residentGroup);
 const residentAgents=[];
@@ -1079,7 +1082,7 @@ function updateHUD(announceGoals=true){
  const atWork=residentAgents.filter(person=>person.userData.job!=="idle"&&person.userData.atWork&&person.userData.pathIndex>=person.userData.path.length).length;
  const idle=residentAgents.filter(person=>person.userData.job==="idle").length;
  document.getElementById("status").textContent=
-  "住民 "+gameState.population+"人 / 就業 "+gameState.employed+"人 / 建物 "+gameState.buildings.length+"棟 / 職場滞在 "+atWork+"人 / 未配置 "+idle+"人";
+  "住民 "+gameState.population+"人 / 就業 "+gameState.employed+"人 / 建物 "+gameState.buildings.length+"棟 / 道路 "+(gameState.roads?.length||0)+"マス / 職場滞在 "+atWork+"人 / 未配置 "+idle+"人";
  updateStartGoals(announceGoals);
  updateFirstBuildHint();
 }
@@ -1154,6 +1157,17 @@ function buildMenu(){
   });
   root.appendChild(button);
  });
+ const roadButton=document.createElement("button");
+ roadButton.className="buildBtn";roadButton.dataset.type="road";
+ roadButton.innerHTML="道路<small>木 1 / 1G・1マスずつ</small>";
+ roadButton.addEventListener("click",()=>{
+  if(interactionMode==="select")setInteractionMode("move");
+  activeTool="road";if(ghost){scene.remove(ghost);ghost=null;}
+  document.querySelectorAll(".buildBtn").forEach(x=>x.classList.toggle("active",x===roadButton));
+  document.getElementById("selectedTool").textContent="道路を敷設";
+  document.getElementById("inspect").textContent="道路を敷きたいマスをタップしてください。木材1・資金1Gを消費します。";
+ });
+ root.appendChild(roadButton);
 }
 function makeBuildingMesh(type,x,z){
  const b=buildingTypes[type];
@@ -1232,7 +1246,7 @@ function updateFarmVisuals(){
 }
 function makeGhost(){
  if(ghost){scene.remove(ghost);ghost=null;}
- if(!activeTool)return;
+ if(!activeTool||activeTool==="road")return;
  ghost=makeBuildingMesh(activeTool,0,0);
  ghost.traverse(o=>{if(o.isMesh){o.material=o.material.clone();o.material.transparent=true;o.material.opacity=0.48;}});
  scene.add(ghost);
@@ -1243,11 +1257,45 @@ function buildingPositionFromPoint(type,x,z){
  return cellWorldCenter(type,a.x,a.z);
 }
 function footprintFree(type,x,z){
- const occupied=new Set();
+ const occupied=new Set(roadCellSet);
  for(const b of gameState.buildings){
   footprintCellKeys(b.type,b.x,b.z).forEach(k=>occupied.add(k));
  }
  return footprintCellKeys(type,x,z).every(k=>!occupied.has(k));
+}
+function isRoadCellValid(ix,iz){
+ if(ix<0||iz<0||ix>=GRID_CELLS||iz>=GRID_CELLS||!isCellExplored(ix,iz))return false;
+ const center=cellWorldCenter("hut",ix,iz),terrain=terrainData(center.x,center.z);
+ if(!terrain.land||["river","lake","snow","mountain","sea"].includes(terrain.kind))return false;
+ const corners=[[GRID_ORIGIN+ix*CELL,GRID_ORIGIN+iz*CELL],[GRID_ORIGIN+(ix+1)*CELL,GRID_ORIGIN+iz*CELL],[GRID_ORIGIN+(ix+1)*CELL,GRID_ORIGIN+(iz+1)*CELL],[GRID_ORIGIN+ix*CELL,GRID_ORIGIN+(iz+1)*CELL]];
+ const heights=corners.map(p=>terrainData(p[0],p[1]).height);
+ if(Math.max(...heights)-Math.min(...heights)>2.2)return false;
+ const key=ix+","+iz,x0=GRID_ORIGIN+ix*CELL,z0=GRID_ORIGIN+iz*CELL,x1=x0+CELL,z1=z0+CELL;
+ if(gameState.buildings.some(b=>footprintCellKeys(b.type,b.x,b.z).includes(key)))return false;
+ if(treeLocations.some(p=>p.x>x0+0.2&&p.x<x1-0.2&&p.z>z0+0.2&&p.z<z1-0.2)||rockLocations.some(p=>p.x>x0+0.2&&p.x<x1-0.2&&p.z>z0+0.2&&p.z<z1-0.2))return false;
+ return true;
+}
+function addRoadMesh(ix,iz){
+ const center=cellWorldCenter("hut",ix,iz),y=terrainData(center.x,center.z).height+0.09;
+ const mesh=new THREE.Mesh(new THREE.BoxGeometry(CELL*0.82,0.12,CELL*0.82),new THREE.MeshStandardMaterial({color:0x927b59,roughness:1}));
+ mesh.position.set(center.x,y,center.z);mesh.receiveShadow=true;mesh.userData.roadKey=ix+","+iz;roadGroup.add(mesh);
+}
+function restoreRoads(){
+ roadGroup.children.forEach(mesh=>{mesh.geometry?.dispose();if(mesh.material)mesh.material.dispose();});
+ roadGroup.clear();roadCellSet.clear();
+ if(!Array.isArray(gameState.roads))gameState.roads=[];
+ gameState.roads=gameState.roads.filter(key=>{if(typeof key!=="string"||!/^\d+,\d+$/.test(key))return false;const [ix,iz]=key.split(",").map(Number);return ix>=0&&iz>=0&&ix<GRID_CELLS&&iz<GRID_CELLS;});
+ gameState.roads=[...new Set(gameState.roads)];
+ gameState.roads.forEach(key=>{const [ix,iz]=key.split(",").map(Number);roadCellSet.add(key);addRoadMesh(ix,iz);});
+}
+function placeRoad(x,z){
+ const ix=worldToCell(x),iz=worldToCell(z),key=ix+","+iz;
+ if(!isRoadCellValid(ix,iz)){showMessage("このマスは道路の条件を満たしていません");return;}
+ if(roadCellSet.has(key)){showMessage("ここには既に道路があります");return;}
+ if(gameState.wood<1||gameState.money<1){showMessage("道路には木材1と資金1Gが必要です");return;}
+ gameState.wood-=1;gameState.money-=1;gameState.roads.push(key);roadCellSet.add(key);addRoadMesh(ix,iz);
+ document.getElementById("inspect").textContent="道路を敷設しました。住民は道路を優先して移動します。";
+ updateHUD();saveGame(false);
 }
 function placeBuilding(type,x,z){
  const b=buildingTypes[type];
@@ -1283,6 +1331,7 @@ function removeAllBuildings(){
 }
 function restoreBuildings(){
  removeAllBuildings();
+ restoreRoads();
  gameState.housing=8;
  for(const item of gameState.buildings){
   const a=cellAnchor(item.type,item.x,item.z);
@@ -1331,7 +1380,8 @@ function findResidentPath(start,target){
  while(head<tail&& !visited[goalId]){
   const id=queue[head++],ix=id%GRID_CELLS,iz=Math.floor(id/GRID_CELLS);
   const herePoint=cellWorldCenter("hut",ix,iz),here=terrainData(herePoint.x,herePoint.z);
-  for(const [dx,dz] of dirs){
+  const orderedDirs=dirs.slice().sort((a,b)=>Number(roadCellSet.has((ix+b[0])+","+(iz+b[1])))-Number(roadCellSet.has((ix+a[0])+","+(iz+a[1]))));
+  for(const [dx,dz] of orderedDirs){
    const nx=ix+dx,nz=iz+dz,nid=nz*GRID_CELLS+nx;
    if(nx<0||nz<0||nx>=GRID_CELLS||nz>=GRID_CELLS||visited[nid]||!walkable(nx,nz,nid))continue;
    if(dx&&dz&&(!walkable(ix+dx,iz,ix+dx+iz*GRID_CELLS)||!walkable(ix,iz+dz,ix+(iz+dz)*GRID_CELLS)))continue;
@@ -1466,6 +1516,7 @@ function loadGameData(data){
  gameState.firstCellSelected=!!s.firstCellSelected;
  gameState.completedStartGoals=Array.isArray(s.completedStartGoals)?s.completedStartGoals.filter(id=>START_GOALS.some(g=>g.id===id)):[];
  gameState.exploredCells=Array.isArray(s.exploredCells)?s.exploredCells.filter(key=>/^\d+,\d+$/.test(key)):[];
+ gameState.roads=Array.isArray(s.roads)?s.roads.filter(key=>/^\d+,\d+$/.test(key)):[];
  exploredCellSet=new Set(gameState.exploredCells);
  gameState.buildings=Array.isArray(s.buildings)?s.buildings.filter(b=>buildingTypes[b.type]&&Number.isFinite(b.x)&&Number.isFinite(b.z)): [];
  gameState.paused=!!s.paused;
@@ -1479,7 +1530,7 @@ function loadGameData(data){
 }
 function initializeNewGame(){
  gameState.day=1;gameState.year=1;gameState.season=0;gameState.paused=true;gameState.elapsed=0;
- gameState.firstCellSelected=false;gameState.completedStartGoals=[];gameState.exploredCells=[];
+ gameState.firstCellSelected=false;gameState.completedStartGoals=[];gameState.exploredCells=[];gameState.roads=[];roadCellSet.clear();roadGroup.clear();
  gameState.population=5;gameState.money=120;gameState.food=80;gameState.wood=35;gameState.stone=15;
  gameState.housing=8;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.workforceByType={farm:0,woodcutter:0,quarry:0,well:0};gameState.buildings=[];gameState.selected=null;
  gameState.nextId=1;gameState.foodProduced=0;gameState.woodProduced=0;gameState.stoneProduced=0;
@@ -1598,56 +1649,36 @@ function buildingPlacementSummary(type,x,z){
 function updateCellPreview(event){
  const hit=setPointerRay(event);
  if(!hit){clearCellPreview();if(ghost)ghost.visible=false;return;}
- const selecting=interactionMode==="select";
- const type=selecting?"hut":(activeTool||"hut");
+ const selecting=interactionMode==="select",roadMode=!selecting&&activeTool==="road";
+ const type=selecting||roadMode?"hut":(activeTool||"hut");
  const p=selecting?{x:hit.point.x,z:hit.point.z}:buildingPositionFromPoint(type,hit.point.x,hit.point.z);
  const a=selecting?{x:worldToCell(hit.point.x),z:worldToCell(hit.point.z)}:cellAnchor(type,p.x,p.z);
- const size=selecting?1:(activeTool?(buildingTypes[type].size||1):1);
- const checkingPlacement=!selecting&&!!activeTool;
- const explored=!checkingPlacement?true:footprintCellKeys(type,p.x,p.z).every(key=>{const parts=key.split(",").map(Number);return isCellExplored(parts[0],parts[1]);});
- const terrainValid=!checkingPlacement||footprintTerrainValid(type,p.x,p.z);
- const naturalClear=!checkingPlacement||footprintNaturalClear(type,p.x,p.z);
- const resourceCheck=checkingPlacement?resourcePlacementCheck(type,p.x,p.z):{valid:true,reason:""};
- const free=!checkingPlacement||footprintFree(type,p.x,p.z);
- const affordable=!checkingPlacement||(gameState.wood>=(buildingTypes[type].cost.wood||0)&&gameState.stone>=(buildingTypes[type].cost.stone||0)&&gameState.money>=buildingTypes[type].cost.money);
+ const size=selecting||roadMode?1:(activeTool?(buildingTypes[type].size||1):1);
+ const checkingPlacement=!selecting&&!!activeTool,key=a.x+","+a.z;
+ const explored=!checkingPlacement?true:roadMode?isCellExplored(a.x,a.z):footprintCellKeys(type,p.x,p.z).every(k=>{const parts=k.split(",").map(Number);return isCellExplored(parts[0],parts[1]);});
+ const terrainValid=!checkingPlacement?true:roadMode?isRoadCellValid(a.x,a.z):footprintTerrainValid(type,p.x,p.z);
+ const naturalClear=!checkingPlacement||roadMode?true:footprintNaturalClear(type,p.x,p.z);
+ const resourceCheck=checkingPlacement&&!roadMode?resourcePlacementCheck(type,p.x,p.z):{valid:true,reason:""};
+ const free=!checkingPlacement?true:roadMode?!roadCellSet.has(key)&&!gameState.buildings.some(b=>footprintCellKeys(b.type,b.x,b.z).includes(key)):footprintFree(type,p.x,p.z);
+ const affordable=!checkingPlacement?true:roadMode?(gameState.wood>=1&&gameState.money>=1):(gameState.wood>=(buildingTypes[type].cost.wood||0)&&gameState.stone>=(buildingTypes[type].cost.stone||0)&&gameState.money>=buildingTypes[type].cost.money);
  const valid=!checkingPlacement||(explored&&terrainValid&&naturalClear&&resourceCheck.valid&&free&&affordable);
- const points=[];
- const yOffset=0.22;
+ const points=[],yOffset=0.22;
  for(let dz=0;dz<size;dz++)for(let dx=0;dx<size;dx++){
-  const ix=a.x+dx,iz=a.z+dz;
-  const x0=GRID_ORIGIN+ix*CELL,z0=GRID_ORIGIN+iz*CELL;
-  const x1=x0+CELL,z1=z0+CELL;
+  const ix=a.x+dx,iz=a.z+dz,x0=GRID_ORIGIN+ix*CELL,z0=GRID_ORIGIN+iz*CELL,x1=x0+CELL,z1=z0+CELL;
   const corners=[[x0,z0],[x1,z0],[x1,z1],[x0,z1]];
-  for(let i=0;i<4;i++){
-   const c1=corners[i],c2=corners[(i+1)%4];
-   const h1=terrainData(c1[0],c1[1]).height+yOffset;
-   const h2=terrainData(c2[0],c2[1]).height+yOffset;
-   points.push(c1[0],h1,c1[1],c2[0],h2,c2[1]);
-  }
+  for(let i=0;i<4;i++){const c1=corners[i],c2=corners[(i+1)%4];points.push(c1[0],terrainData(c1[0],c1[1]).height+yOffset,c1[1],c2[0],terrainData(c2[0],c2[1]).height+yOffset,c2[1]);}
  }
  clearCellPreview();
- const geometry=new THREE.BufferGeometry();
- geometry.setAttribute("position",new THREE.Float32BufferAttribute(points,3));
- const material=new THREE.LineBasicMaterial({
-  color:selecting?0xffdf70:(activeTool?(valid?0x55ff88:0xff5555):0xffffff),
-  transparent:true,opacity:selecting?0.95:(activeTool?0.98:0.78),
-  depthTest:false
- });
- cellPreview=new THREE.LineSegments(geometry,material);
- cellPreview.renderOrder=20;
- scene.add(cellPreview);
+ const geometry=new THREE.BufferGeometry();geometry.setAttribute("position",new THREE.Float32BufferAttribute(points,3));
+ const material=new THREE.LineBasicMaterial({color:selecting?0xffdf70:(activeTool?(valid?0x55ff88:0xff5555):0xffffff),transparent:true,opacity:selecting?0.95:(activeTool?0.98:0.78),depthTest:false});
+ cellPreview=new THREE.LineSegments(geometry,material);cellPreview.renderOrder=20;scene.add(cellPreview);
  if(activeTool&&!selecting){
-  const status=!explored?"未探索の土地です。先にカメラを移動して発見してください。":!terrainValid?"傾斜が急すぎるか、建設できない地形です。":!naturalClear?"木や岩に重なっています。少し場所をずらしてください。":!resourceCheck.valid?resourceCheck.reason:!free?"ほかの建物と重なっています。":!affordable?"資源または資金が不足しています。":"配置可能です。 "+buildingPlacementSummary(type,p.x,p.z);
+  const status=!explored?"未探索の土地です。先にカメラを移動して発見してください。":!terrainValid?(roadMode?"道路を敷けない地形、または傾斜です。":"傾斜が急すぎるか、建設できない地形です。"):!naturalClear?"木や岩に重なっています。少し場所をずらしてください。":!resourceCheck.valid?resourceCheck.reason:!free?"既に道路または建物があります。":!affordable?"資源または資金が不足しています。":roadMode?"道路を敷設できます。 木1 / 1G":"配置可能です。 "+buildingPlacementSummary(type,p.x,p.z);
   document.getElementById("inspect").textContent=status;
  }
- if(ghost){
-  ghost.visible=!selecting&&!!activeTool;
-  if(activeTool&&!selecting){
-   ghost.position.set(p.x,0,p.z);
-   ghost.traverse(o=>{if(o.isMesh)o.material.opacity=valid?0.48:0.18;});
-  }
- }
+ if(ghost){ghost.visible=!selecting&&!!activeTool&&!roadMode;if(activeTool&&!selecting&&!roadMode){ghost.position.set(p.x,0,p.z);ghost.traverse(o=>{if(o.isMesh)o.material.opacity=valid?0.48:0.18;});}}
 }
+
 function updateGhostAt(event){updateCellPreview(event);}
 renderer.domElement.addEventListener("pointerdown",e=>{
  if(e.pointerType==="mouse"&&e.button!==0)return;
@@ -1691,7 +1722,7 @@ function selectLogicalCell(hit){
  const resourceInfo=" / 農業適性 "+farmSuit+"% / 森林資源 "+forestSuit+"%";
  document.getElementById("inspect").textContent=
   "選択マス ("+(ix+1)+", "+(iz+1)+") / 地形："+(terrainNames[terrain.kind]||terrain.kind||"不明")+
-  resourceInfo+" / 建物："+(building?buildingTypes[building.type].name:"なし");
+  resourceInfo+" / 建物："+(building?buildingTypes[building.type].name:"なし")+" / 道路："+(roadCellSet.has(key)?"あり":"なし");
 }
 function setInteractionMode(mode){
  interactionMode=mode==="select"?"select":"move";
@@ -1725,8 +1756,8 @@ renderer.domElement.addEventListener("pointerup",e=>{
   return;
  }
  if(!activeTool)return;
- const p=buildingPositionFromPoint(activeTool,hit.point.x,hit.point.z);
- placeBuilding(activeTool,p.x,p.z);
+ const p=buildingPositionFromPoint(activeTool==="road"?"hut":activeTool,hit.point.x,hit.point.z);
+ if(activeTool==="road")placeRoad(p.x,p.z);else placeBuilding(activeTool,p.x,p.z);
  if(e.pointerType!=="mouse")clearCellPreview();
 });
 renderer.domElement.addEventListener("pointercancel",()=>{pointerStart=null;pointerMoved=false;});
@@ -1745,7 +1776,7 @@ document.getElementById("cancelBuild").addEventListener("click",()=>{
  activeTool=null;clearCellPreview();if(ghost){scene.remove(ghost);ghost=null;}
  document.querySelectorAll(".buildBtn").forEach(x=>x.classList.remove("active"));
  document.getElementById("selectedTool").textContent="配置する建物を選択";
- document.getElementById("inspect").textContent="建設選択を解除しました。";
+ document.getElementById("inspect").textContent="建設・道路の選択を解除しました。";
  updateFirstBuildHint();
 });
 document.getElementById("exportSave").addEventListener("click",()=>{
