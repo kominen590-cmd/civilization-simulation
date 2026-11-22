@@ -1521,9 +1521,12 @@ function addRoadMesh(ix,iz){
  tile.traverse(o=>{if(o.isMesh){o.receiveShadow=true;o.castShadow=false;}});
  tile.userData.roadKey=ix+","+iz;roadGroup.add(tile);
 }
+function clearRoadMeshes(){
+ roadGroup.traverse(object=>{if(object.isMesh)object.geometry?.dispose();});
+ roadGroup.clear();
+}
 function restoreRoads(){
- roadGroup.children.forEach(mesh=>{mesh.geometry?.dispose();if(mesh.material)mesh.material.dispose();});
- roadGroup.clear();roadCellSet.clear();
+ clearRoadMeshes();roadCellSet.clear();
  if(!Array.isArray(gameState.roads))gameState.roads=[];
  gameState.roads=gameState.roads.filter(key=>{if(typeof key!=="string"||!/^\d+,\d+$/.test(key))return false;const [ix,iz]=key.split(",").map(Number);return ix>=0&&iz>=0&&ix<GRID_CELLS&&iz<GRID_CELLS;});
  gameState.roads=[...new Set(gameState.roads)];
@@ -1776,7 +1779,7 @@ function loadGameData(data){
 }
 function initializeNewGame(){
  gameState.day=1;gameState.year=1;gameState.season=0;gameState.paused=true;gameState.elapsed=0;
- gameState.firstCellSelected=false;gameState.completedStartGoals=[];gameState.exploredCells=[];gameState.roads=[];roadCellSet.clear();roadGroup.clear();
+ gameState.firstCellSelected=false;gameState.completedStartGoals=[];gameState.exploredCells=[];gameState.roads=[];roadCellSet.clear();clearRoadMeshes();
  gameState.population=5;gameState.money=120;gameState.food=80;gameState.wood=35;gameState.stone=15;
  gameState.housing=8;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.workforceByType={farm:0,woodcutter:0,quarry:0,well:0};gameState.buildings=[];gameState.selected=null;
  gameState.nextId=1;gameState.foodProduced=0;gameState.woodProduced=0;gameState.stoneProduced=0;
