@@ -294,7 +294,8 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
 renderer.setSize(innerWidth,innerHeight);
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.08;
+renderer.toneMappingExposure=1.02;
+renderer.physicallyCorrectLights=true;
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
@@ -311,8 +312,11 @@ controls.minDistance=12;
 controls.maxDistance=230;
 controls.target.set(-48,0,-18);
 
-scene.add(new THREE.HemisphereLight(0xffffff,0x617052,2));
-const sun=new THREE.DirectionalLight(0xfff2d9,2.35);
+scene.add(new THREE.HemisphereLight(0xeaf2f5,0x58634c,1.55));
+const fillLight=new THREE.DirectionalLight(0xc4d7e4,0.42);
+fillLight.position.set(75,38,-65);
+scene.add(fillLight);
+const sun=new THREE.DirectionalLight(0xfff3df,2.05);
 sun.position.set(-70,110,55);
 sun.castShadow=true;
 sun.shadow.mapSize.set(1024,1024);
@@ -594,10 +598,24 @@ for(let i=0;i<positions.count;i++){
 geometry.setAttribute("color",new THREE.Float32BufferAttribute(colors,3));
 geometry.computeVertexNormals();
 
+// 微細な土・草地の凹凸を共有テクスチャで表現。画像ファイルを増やさず端末負荷を抑える。
+const surfacePixels=new Uint8Array(128*128*4);
+for(let py=0;py<128;py++)for(let px=0;px<128;px++){
+ const n1=hash(px*1.7,py*1.9),n2=hash(px*4.3+17,py*3.7-9);
+ const v=Math.round(112+n1*82+n2*42),k=(py*128+px)*4;
+ surfacePixels[k]=v;surfacePixels[k+1]=v;surfacePixels[k+2]=v;surfacePixels[k+3]=255;
+}
+const surfaceBump=new THREE.DataTexture(surfacePixels,128,128,THREE.RGBAFormat);
+surfaceBump.wrapS=surfaceBump.wrapT=THREE.RepeatWrapping;
+surfaceBump.repeat.set(42,42);
+surfaceBump.colorSpace=THREE.NoColorSpace;
+surfaceBump.needsUpdate=true;
+
 const terrain=new THREE.Mesh(
  geometry,
  new THREE.MeshStandardMaterial({
-  vertexColors:true,roughness:1,metalness:0
+  vertexColors:true,roughness:0.96,metalness:0,
+  bumpMap:surfaceBump,bumpScale:0.13
  })
 );
 terrain.receiveShadow=true;
@@ -606,8 +624,9 @@ scene.add(terrain);
 // 海面
 const ocean=new THREE.Mesh(
  new THREE.PlaneGeometry(500,500),
- new THREE.MeshStandardMaterial({
-  color:0x438ba8,roughness:0.35,metalness:0.05
+ new THREE.MeshPhysicalMaterial({
+  color:0x397f9d,roughness:0.2,metalness:0.02,
+  clearcoat:0.32,clearcoatRoughness:0.24
  })
 );
 ocean.rotation.x=-Math.PI/2;
@@ -615,8 +634,10 @@ ocean.position.y=-0.55;
 scene.add(ocean);
 
 // 湖の水面：地形のくぼみに合わせる
-const lakeMaterial=new THREE.MeshStandardMaterial({
- color:0x438eae,roughness:0.19,metalness:0.08
+const lakeMaterial=new THREE.MeshPhysicalMaterial({
+ color:0x397f9f,roughness:0.16,metalness:0.025,
+ clearcoat:0.42,clearcoatRoughness:0.2,
+ bumpMap:surfaceBump,bumpScale:0.025
 });
 for(const lake of lakes){
  if(!isLand(lake.x,lake.z)||isStartingPlain(lake.x,lake.z))continue;
@@ -634,8 +655,9 @@ for(const lake of lakes){
 }
 
 // 川：陸地上の区間だけ描画
-const riverMaterial=new THREE.MeshStandardMaterial({
- color:0x438eae,roughness:0.2,metalness:0.06
+const riverMaterial=new THREE.MeshPhysicalMaterial({
+ color:0x397f9f,roughness:0.17,metalness:0.02,
+ clearcoat:0.38,clearcoatRoughness:0.22
 });
 for(const curve of riverCurves){
  let segment=[];
@@ -787,8 +809,8 @@ for(let attempt=0;attempt<5000&&stoneDepositCenters.length<3;attempt++){
 // 岩場：高地や鉱床の周辺に岩を配置する。鉱床では岩がまとまって見える。
 
 const MAX_ROCKS=Math.round(520*({low:0.65,normal:1,high:1.4}[savedWorldSettings.resources]||1));
-const rockGeometry=new THREE.DodecahedronGeometry(1,0);
-const rockMaterial=new THREE.MeshStandardMaterial({color:0x77776e,roughness:1});
+const rockGeometry=new THREE.DodecahedronGeometry(1,1);
+const rockMaterial=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.94,metalness:0.015});
 const rocks=new THREE.InstancedMesh(rockGeometry,rockMaterial,MAX_ROCKS);
 let rockCount=0;
 const rockLocations=[];
@@ -804,17 +826,28 @@ for(let i=0;i<MAX_ROCKS*3&&rockCount<MAX_ROCKS;i++){
  dummy.scale.set(size,size*(0.55+random()*0.55),size*(0.7+random()*0.5));
  dummy.rotation.set(random()*0.4,random()*Math.PI*2,random()*0.4);
  dummy.updateMatrix();
- rocks.setMatrixAt(rockCount++,dummy.matrix);
+ rocks.setMatrixAt(rockCount,dummy.matrix);
+ const rockTint=new THREE.Color().setHSL(0.10+random()*0.025,0.035,0.37+random()*0.17);
+ rocks.setColorAt(rockCount,rockTint);
+ rockCount++;
  rockLocations.push({x,z});
 }
 rocks.count=rockCount;
 rocks.instanceMatrix.needsUpdate=true;
+if(rocks.instanceColor)rocks.instanceColor.needsUpdate=true;
 rocks.castShadow=false;
 scene.add(rocks);
 
 // 草むら：遠景の地面に細かな自然物を加える。InstancedMeshで描画負荷を抑える。
-const grassGeometry=new THREE.ConeGeometry(0.075,0.48,4);
-const grassMaterial=new THREE.MeshStandardMaterial({color:0x829653,roughness:1});
+const grassGeometry=new THREE.BufferGeometry();
+grassGeometry.setAttribute("position",new THREE.Float32BufferAttribute([
+ 0,0,0, -0.055,0.24,0, 0.015,0.48,0.018,
+ 0,0,0, 0.015,0.48,0.018, 0.055,0.23,0,
+ 0,0,0, 0.055,0.23,0, 0.015,0.48,0.018
+],3));
+grassGeometry.computeVertexNormals();
+grassGeometry.computeBoundingSphere();
+const grassMaterial=new THREE.MeshStandardMaterial({color:0x829653,roughness:1,side:THREE.DoubleSide});
 const grass=new THREE.InstancedMesh(grassGeometry,grassMaterial,1050);
 const grassDummy=new THREE.Object3D();
 let grassCount=0;
@@ -838,7 +871,7 @@ if(grass.instanceColor)grass.instanceColor.needsUpdate=true;
 grass.castShadow=false;scene.add(grass);
 
 // 低木：森林の縁や湿った平地に点在させ、木々の足元を自然につなぐ。
-const bushGeometry=new THREE.IcosahedronGeometry(0.72,1);
+const bushGeometry=new THREE.IcosahedronGeometry(0.72,2);
 const bushMaterial=new THREE.MeshStandardMaterial({color:0x527443,roughness:1});
 const bushes=new THREE.InstancedMesh(bushGeometry,bushMaterial,280);
 let bushCount=0;
