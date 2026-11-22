@@ -75,10 +75,11 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 #titleScreen.hidden{display:none}
 .titleArtwork{position:relative;touch-action:manipulation;pointer-events:auto;width:min(100vw,177.6833vh);height:min(100vh,56.2804vw);aspect-ratio:1672/941;overflow:hidden;flex:none}
 .titleArtwork>img{display:block;width:100%;height:100%;object-fit:fill;user-select:none;-webkit-user-drag:none;pointer-events:none}
-.titleHit{position:absolute;z-index:6;left:3.0%;width:23.0%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(218,235,245,.88);border-radius:9px;background:linear-gradient(180deg,rgba(49,76,96,.97),rgba(17,35,52,.97));box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 3px 9px rgba(0,0,0,.42);color:#fff;padding:3px 5px;margin:0;font:700 clamp(10px,1.25vw,16px)/1.2 sans-serif;letter-spacing:.03em;text-shadow:0 1px 3px #000;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(255,224,138,.35);pointer-events:auto;appearance:none;-webkit-appearance:none}
-.titleHit:active{background:linear-gradient(180deg,rgba(105,137,155,.99),rgba(42,72,91,.99));transform:translateY(1px);box-shadow:inset 0 2px 5px rgba(0,0,0,.35)}
-.titleHit:focus-visible{outline:3px solid #ffe08a;outline-offset:2px;border-radius:8px}
-@media(max-width:520px){.titleHit{width:29%;left:2.5%;font-size:clamp(10px,2.5vw,14px);border-radius:7px;min-height:34px}}
+.titleHit{position:absolute;z-index:6;left:3.0%;width:23.0%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(218,205,174,.72);border-radius:7px;background:linear-gradient(180deg,rgba(77,68,53,.88),rgba(35,39,37,.91));box-shadow:inset 0 1px 0 rgba(255,245,218,.18),0 2px 7px rgba(0,0,0,.32);color:#f5edda;padding:3px 5px;margin:0;font:700 clamp(10px,1.25vw,16px)/1.2 sans-serif;letter-spacing:.03em;text-shadow:0 1px 3px rgba(0,0,0,.85);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(255,224,138,.25);pointer-events:auto;appearance:none;-webkit-appearance:none;backdrop-filter:blur(2px)}
+.titleHit:active{background:linear-gradient(180deg,rgba(112,94,65,.96),rgba(57,58,48,.96));transform:translateY(1px);box-shadow:inset 0 2px 5px rgba(0,0,0,.3)}
+.titleHit:focus-visible{outline:2px solid #e9d7a7;outline-offset:2px;border-radius:8px}
+@media(max-width:520px){.titleHit{width:29%;left:2.5%;font-size:clamp(10px,2.5vw,14px);border-radius:6px;min-height:36px}}
+
 #hitNewGame{top:54.8%;height:6.7%}
 #hitContinue{top:61.9%;height:6.0%}
 #hitSaveManage{top:68.5%;height:5.8%}
@@ -86,8 +87,8 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 #hitHowTo{top:81.0%;height:5.6%}
 #hitCredits{top:87.0%;height:5.6%}
 #hitContinue:disabled{cursor:default}
-.titleContent{position:absolute;inset:0;pointer-events:none}
-.titleSubscreen{display:none;pointer-events:auto;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,88%);max-height:88%;overflow:auto;padding:clamp(17px,4vw,28px);border:1px solid rgba(255,255,255,.45);border-radius:18px;background:rgba(18,28,39,.94);box-shadow:0 12px 45px rgba(0,0,0,.48);backdrop-filter:blur(8px);color:#fff}
+.titleContent{position:absolute;inset:0;z-index:10;pointer-events:none}
+.titleSubscreen{display:none;z-index:11;pointer-events:auto;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,88%);max-height:88%;overflow:auto;padding:clamp(17px,4vw,28px);border:1px solid rgba(255,255,255,.45);border-radius:18px;background:rgba(18,28,39,.94);box-shadow:0 12px 45px rgba(0,0,0,.48);backdrop-filter:blur(8px);color:#fff}
 .titleSubscreen.active{display:block}
 .titleSubscreen h2{text-align:center;margin:0 0 18px;font-size:clamp(19px,3vw,25px)}
 .settingRow{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;font-size:14px}
@@ -2400,7 +2401,22 @@ function openNewGameSettings(){
  showTitleSection("newGameScreen");
 }
 document.getElementById("hitNewGame").addEventListener("click",openNewGameSettings);
-// タイトルメニューは背景の各項目に重ねた実ボタンが直接操作を受け取る。
+document.getElementById("hitContinue").addEventListener("click",()=>{
+ if(hasCurrentSave())enterGame("continue");
+ else showMessage("この世界のセーブデータはまだありません。");
+});
+document.getElementById("hitSettings").addEventListener("click",()=>{
+ const exists=hasCurrentSave();
+ document.getElementById("settingsContinueButton").disabled=!exists;
+ showTitleSection("settingsScreen");
+});
+document.getElementById("hitSaveManage").addEventListener("click",()=>{
+ refreshSaveManagement();
+ showTitleSection("saveManageScreen");
+});
+document.getElementById("hitHowTo").addEventListener("click",()=>showTitleSection("howToScreen"));
+document.getElementById("hitCredits").addEventListener("click",()=>showTitleSection("creditsScreen"));
+// タイトルメニュー各ボタンから、それぞれ対応する画面へ直接遷移する。
 document.getElementById("startNewWorldButton").addEventListener("click",()=>{
  const settings={
   worldSize:document.getElementById("worldSizeSelect").value,
@@ -2418,19 +2434,11 @@ document.getElementById("startNewWorldButton").addEventListener("click",()=>{
   location.reload();
  }catch(e){showMessage("新しい世界を準備できませんでした。ブラウザの保存領域を確認してください");}
 });
-document.getElementById("hitContinue").addEventListener("click",()=>{
- if(hasCurrentSave())enterGame("continue");
-});
 document.getElementById("settingsContinueButton").addEventListener("click",()=>{
  if(hasCurrentSave())enterGame("continue");
 });
 document.getElementById("manageContinueButton").addEventListener("click",()=>{
  if(hasCurrentSave())enterGame("continue");
-});
-document.getElementById("hitSettings").addEventListener("click",()=>{
- const exists=hasCurrentSave();
- document.getElementById("settingsContinueButton").disabled=!exists;
- showTitleSection("settingsScreen");
 });
 function refreshSaveManagement(){
  const exists=hasCurrentSave();
