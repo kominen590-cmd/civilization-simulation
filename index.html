@@ -1044,7 +1044,7 @@ for(let i=0;i<140;i++){
  const pz=START_PLAIN.z+Math.sin(angle)*radius*0.82;
  if(!isStartingPlain(px,pz)||Math.hypot(px+48,pz+20)<15||Math.hypot(px+38,pz+28)<13)continue;
  const scale=0.28+hash(i+4127,SEED+4229)*0.42;
- grassDummy.position.set(px,0.86,pz);
+ grassDummy.position.set(px,0.5+0.72*scale,pz);
  grassDummy.scale.set(scale*1.2,scale*0.72,scale);
  grassDummy.rotation.set(0,hash(i+4133,SEED+4231)*Math.PI,0);
  grassDummy.updateMatrix();bushes.setMatrixAt(bushCount,grassDummy.matrix);
@@ -1094,9 +1094,9 @@ for(let i=0;i<440;i++){
  const px=cx+Math.cos(angle)*distance,pz=cz+Math.sin(angle)*distance;
  if(!isStartingPlain(px,pz)||Math.hypot(px+48,pz+20)<10||Math.hypot(px+38,pz+28)<8)continue;
  const scale=0.48+hash(i+5143,SEED+5249)*0.65;
- flowerDummy.position.set(px,0.65+0.15*scale,pz);flowerDummy.scale.setScalar(scale);
+ flowerDummy.position.set(px,0.5+0.15*scale,pz);flowerDummy.scale.setScalar(scale);
  flowerDummy.rotation.set(0,angle,0);flowerDummy.updateMatrix();flowerStems.setMatrixAt(flowerCount,flowerDummy.matrix);
- flowerDummy.position.y=0.65+0.31*scale;flowerDummy.updateMatrix();flowerHeads.setMatrixAt(flowerCount,flowerDummy.matrix);
+ flowerDummy.position.y=0.5+0.31*scale;flowerDummy.updateMatrix();flowerHeads.setMatrixAt(flowerCount,flowerDummy.matrix);
  flowerHeads.setColorAt(flowerCount,new THREE.Color(openingFlowerColors[Math.floor(hash(i+5153,SEED+5251)*openingFlowerColors.length)]));
  flowerCount++;
 }
