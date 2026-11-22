@@ -168,13 +168,14 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 <div id="startBriefing" aria-modal="true" role="dialog" aria-labelledby="startBriefingTitle">
  <div id="startBriefingCard">
   <h2 id="startBriefingTitle">新しい文明の始まり</h2>
-  <p>世界が完成しました。あなたの文明は住民5人の小さな集落から始まります。最初の居住地は、建設しやすい広大で平坦な草原です。</p>
+  <p>住民5人の小さな文明が始まります。住居1軒と農地1つがある広大な平坦草原を拠点に、周囲の土地を調べて集落を発展させましょう。</p>
   <ul>
-   <li>住居と小さな農場が最初から建っています。</li>
-   <li>移動モードと選択モードを切り替え、選択モードではマスの地形や建物を確認できます。</li>
-   <li>建設メニューから建物を選び、移動モードで地面をタップして配置できます。</li>
-   <li>画面左側の「最初の集落」の目標を参考に、土地の確認・住居・伐採所・人口増加を進めましょう。</li>
-   <li>時間は停止中です。準備ができたら右上の「時間を再開」を押してください。</li>
+   <li><b>最初の状態：</b>住民5人 / 住居1軒（定員5人） / 農地1つ。食料80・木材35・石材15・資金120を持っています。</li>
+   <li><b>土地を調べる：</b>「選択モード」に切り替え、草原のマスをタップすると地形・建物・資源適性を確認できます。</li>
+   <li><b>周囲を探索する：</b>「移動モード」に戻し、1本指でカメラを動かします。霧の先には森林や丘陵などがあります。2本指で拡大・縮小や回転ができます。</li>
+   <li><b>集落を広げる：</b>建設メニューから住居をもう1軒建て、森林の近くに伐採所を配置しましょう。緑色のマスが建設可能な場所です。</li>
+   <li><b>暮らしを確かめる：</b>右上の「時間を再開」を押すと住民が住居と職場を行き来し、農地は5日ごとに食料を生産します。</li>
+   <li>画面左側の「最初の集落」はおすすめ目標です。順番を無視して自由に建設・探索してもかまいません。</li>
   </ul>
   <button class="titleButton" id="closeStartBriefing">集落を確認する</button>
  </div>
@@ -1129,7 +1130,7 @@ const gameState={
  day:1,year:1,season:0,paused:false,elapsed:0,workforceByType:{farm:0,woodcutter:0,quarry:0,well:0},
  firstCellSelected:false,completedStartGoals:[],exploredCells:[],roads:[],
  population:5,money:120,food:80,wood:35,stone:15,
- housing:8,workers:4,employed:0,happiness:55,buildings:[],selected:null,
+ housing:0,workers:4,employed:0,happiness:55,buildings:[],selected:null,
  nextId:1,foodProduced:0,woodProduced:0,stoneProduced:0,
  lastDailyReport:null,
  research:0,era:0,lastGrowth:0
@@ -1234,8 +1235,9 @@ function clampCameraToWorld(){
  camera.position.x+=shiftX;camera.position.z+=shiftZ;
 }
 const START_GOALS=[
- {id:"survey",title:"周囲の土地を確認する",hint:"選択モードに切り替え、発見済みの草原マスをタップして地形と資源を確認しましょう。",done:()=>gameState.firstCellSelected},
- {id:"housing",title:"住居をもう1軒建てる",hint:"建設メニューから住居を選び、緑色のマスに配置しましょう。人口の上限が5人増えます。",done:()=>gameState.buildings.filter(b=>b.type==="hut").length>=2},
+ {id:"survey",title:"草原のマスを確認する",hint:"選択モードに切り替え、草原のマスをタップして地形と資源適性を確認しましょう。",done:()=>gameState.firstCellSelected},
+ {id:"scout",title:"草原の外まで周囲を探索する",hint:"移動モードに戻してカメラを草原の外へ動かし、霧の先にある森林を探しましょう。",done:()=>gameState.exploredCells.some(key=>{const [ix,iz]=key.split(",").map(Number);const p=cellWorldCenter("hut",ix,iz);return !isStartingPlain(p.x,p.z);})},
+ {id:"housing",title:"住居をもう1軒建てる",hint:"建設メニューから住居を選び、緑色のマスに配置しましょう。住居の定員が5人増えます。",done:()=>gameState.buildings.filter(b=>b.type==="hut").length>=2},
  {id:"wood",title:"伐採所を建てる",hint:"森林資源の多い場所を探し、木材を生産できる位置に伐採所を建てましょう。",done:()=>gameState.buildings.some(b=>b.type==="woodcutter")},
  {id:"growth",title:"人口を6人以上に増やす",hint:"食料を十分に保ち、住居に空きを作り、満足度を維持しましょう。人口は条件がそろうと10日ごとに増えます。",done:()=>gameState.population>=6}
 ];
@@ -1423,8 +1425,12 @@ function updateFirstBuildHint(){
  }
  if(current.id==="survey"){
   hint.textContent=interactionMode==="move"
-   ?"最初の確認：まず「選択モード」に切り替えましょう。カメラを動かさず、発見済みの草原マスをタップすると地形と資源を確認できます。"
-   :"土地を確認中：発見済みの草原マスをタップしてください。確認が終わったら、次のおすすめとして住居の建設が案内されます。";
+   ?"最初の確認：まず「選択モード」に切り替えましょう。カメラを動かさず、草原のマスをタップすると地形と資源適性を確認できます。"
+   :"土地を確認中：草原のマスをタップしてください。確認後は移動モードで周囲を探索します。";
+ }else if(current.id==="scout"){
+  hint.textContent=interactionMode==="select"
+   ?"周囲を探索するには「移動モード」に戻しましょう。"
+   :"周囲を探索中：1本指でカメラを草原の外へ動かしてください。霧が晴れた場所に森林が見つかることがあります。";
  }else if(current.id==="housing"){
   hint.textContent="次の目標：おすすめの「住居」を選び、緑色のマスに配置しましょう。住居が増えると人口の上限が広がります。";
  }else if(current.id==="wood"){
@@ -1828,7 +1834,7 @@ function removeAllBuildings(){
 function restoreBuildings(){
  removeAllBuildings();
  restoreRoads();
- gameState.housing=8;
+ gameState.housing=0;
  for(const item of gameState.buildings){
   const a=cellAnchor(item.type,item.x,item.z);
   const p=cellWorldCenter(item.type,a.x,a.z);
@@ -2001,7 +2007,7 @@ function syncResidentVisuals(){
   const workPoint=workplace?{x:workplace.x+Math.cos(workAngle)*workRadius,z:workplace.z+Math.sin(workAngle)*workRadius}:homePoint;
   group.position.set(homePoint.x,terrainData(homePoint.x,homePoint.z).height,homePoint.z);
   group.scale.setScalar(0.82);
-  group.userData={homePoint,workPoint,homeBuildingId:home.id||null,workBuildingId:workplace?.id||null,atWork:false,clock:i*2.7,walkPhase:i*0.8,activityPhase:i*1.7,job:slot?.type||"idle",path:[],pathIndex:0,toolGroup,leftLeg,rightLeg,leftArm,rightArm};
+  group.userData={homePoint,workPoint,homeBuildingId:home.id||null,workBuildingId:workplace?.id||null,atWork:false,clock:slot?Math.max(0,14+i*1.6):i*2.7,walkPhase:i*0.8,activityPhase:i*1.7,job:slot?.type||"idle",path:[],pathIndex:0,toolGroup,leftLeg,rightLeg,leftArm,rightArm};
   residentGroup.add(group);residentAgents.push(group);
  }
 }
@@ -2081,16 +2087,18 @@ function initializeNewGame(){
  gameState.day=1;gameState.year=1;gameState.season=0;gameState.paused=true;gameState.elapsed=0;
  gameState.firstCellSelected=false;gameState.completedStartGoals=[];gameState.exploredCells=[];gameState.roads=[];roadCellSet.clear();clearRoadMeshes();
  gameState.population=5;gameState.money=120;gameState.food=80;gameState.wood=35;gameState.stone=15;
- gameState.housing=8;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.workforceByType={farm:0,woodcutter:0,quarry:0,well:0};gameState.buildings=[];gameState.selected=null;
+ gameState.housing=0;gameState.workers=4;gameState.employed=0;gameState.happiness=55;gameState.workforceByType={farm:0,woodcutter:0,quarry:0,well:0};gameState.buildings=[];gameState.selected=null;
  gameState.nextId=1;gameState.foodProduced=0;gameState.woodProduced=0;gameState.stoneProduced=0;
  gameState.lastDailyReport=null;
  gameState.research=0;gameState.era=0;gameState.lastGrowth=0;
- gameState.buildings=[{id:gameState.nextId++,type:"hut",x:-58,z:-22,builtDay:1},{id:gameState.nextId++,type:"farm",x:-24,z:-32,builtDay:1}];
+ gameState.buildings=[{id:gameState.nextId++,type:"hut",x:-48,z:-20,builtDay:1},{id:gameState.nextId++,type:"farm",x:-38,z:-28,builtDay:1}];
  restoreBuildings();
  resetInitialExploration();updateFogMesh();
- controls.target.set(START_PLAIN.x,0,START_PLAIN.z);
- const startDistance=innerWidth/innerHeight<0.8?112:104;
- camera.position.set(START_PLAIN.x+startDistance*0.42,startDistance*0.72,START_PLAIN.z+startDistance*0.62);
+ // 住居と農地の中間を画面中心にし、開始直後から集落を見つけやすくする。
+ const startFocus={x:-43,z:-23};
+ controls.target.set(startFocus.x,0,startFocus.z);
+ const startDistance=innerWidth/innerHeight<0.8?98:84;
+ camera.position.set(startFocus.x+startDistance*0.42,startDistance*0.72,startFocus.z+startDistance*0.62);
  controls.update();
  setInteractionMode("move");
  activeTool=null;
@@ -2365,12 +2373,9 @@ function hasCurrentSave(){
 }
 function showStartBriefing(){
  const panel=document.getElementById("startBriefing");
- if(localStorage.getItem("civilizationIntroSeenV1")!=="1"){
-  panel.classList.add("active");
- }else{
-  gameState.paused=true;
-  updateHUD();
- }
+ panel.classList.add("active");
+ gameState.paused=true;
+ updateHUD();
 }
 function enterGame(mode){
  document.getElementById("titleScreen").classList.add("hidden");
