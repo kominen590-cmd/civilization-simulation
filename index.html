@@ -45,7 +45,7 @@ body{margin:0;overflow:hidden;background:#17251c;color:white;font-family:sans-se
 .goalItem.done{color:#9fcea0}.goalItem.done .goalMark{background:#416b42;border-color:#8cbd85;color:#fff}
 .goalItem.current{color:#fff2c8;font-weight:700}.goalItem.current .goalMark{border-color:#f1d27c;background:#66562e}
 #goalNote{font-size:9px;color:#9eaf9b;margin-top:5px;line-height:1.45}
-#firstBuildHint{font-size:10px;line-height:1.45;color:#d8e8c9;background:#304832;border:1px solid #607d58;border-radius:7px;padding:6px 8px;margin:0 0 7px}
+#firstBuildHint{font-size:10px;line-height:1.45;color:#d8e8c9;background:#304832;border:1px solid #607d58;border-radius:7px;padding:6px 8px;margin:0 0 7px}\n#modeBtn.recommended{border:2px solid #f2d27a;background:linear-gradient(180deg,#536b3d,#314b2c);box-shadow:0 0 0 2px #f2d27a44}
 #savePanel{display:flex;gap:5px;margin-top:7px}
 #economyPanel{position:fixed;inset:0;z-index:25;display:none;align-items:center;justify-content:center;padding:14px;background:#07110dcc;pointer-events:auto}
 #economyPanel.active{display:flex}
@@ -1087,18 +1087,29 @@ function updateStartGoals(announce=true){
 function updateFirstBuildHint(){
  const hint=document.getElementById("firstBuildHint");
  if(!hint)return;
- const firstPlacement=gameState.buildings.length<=2;
- const recommended=document.querySelector('.buildBtn[data-type="hut"]');
- if(recommended)recommended.classList.toggle("recommended",firstPlacement&&!activeTool);
- if(firstPlacement){
-  hint.style.display="block";
-  if(activeTool){
-   hint.textContent="配置中："+buildingTypes[activeTool].name+"。緑色のマスは建設可能、赤色は建設不可です。配置したい場所をタップしてください。";
-  }else{
-   hint.textContent="最初の建設：おすすめの「住居」を選び、緑色の配置マスをタップしましょう。住居を増やすと人口の上限が広がります。";
-  }
+ const current=START_GOALS.find(goal=>!gameState.completedStartGoals.includes(goal.id));
+ const hutButton=document.querySelector('.buildBtn[data-type="hut"]');
+ const woodButton=document.querySelector('.buildBtn[data-type="woodcutter"]');
+ const modeButton=document.getElementById("modeBtn");
+ if(hutButton)hutButton.classList.toggle("recommended",!!current&&current.id==="housing"&&!activeTool);
+ if(woodButton)woodButton.classList.toggle("recommended",!!current&&current.id==="wood"&&!activeTool);
+ if(modeButton)modeButton.classList.toggle("recommended",!!current&&current.id==="survey"&&interactionMode==="move");
+ hint.style.display=current?"block":"none";
+ if(!current)return;
+ if(activeTool){
+  hint.textContent="配置中："+buildingTypes[activeTool].name+"。緑色のマスは配置可能、赤色のマスは配置不可です。地形・資源・建物との重なりを確認して配置してください。";
+  return;
+ }
+ if(current.id==="survey"){
+  hint.textContent=interactionMode==="move"
+   ?"最初の確認：まず「選択モード」に切り替えましょう。カメラを動かさず、発見済みの草原マスをタップすると地形と資源を確認できます。"
+   :"土地を確認中：発見済みの草原マスをタップしてください。確認が終わったら、次のおすすめとして住居の建設が案内されます。";
+ }else if(current.id==="housing"){
+  hint.textContent="次の目標：おすすめの「住居」を選び、緑色のマスに配置しましょう。住居が増えると人口の上限が広がります。";
+ }else if(current.id==="wood"){
+  hint.textContent="次の目標：森林資源が豊富な場所を探し、「伐採所」を建てましょう。森の近くで、木や岩と重ならない緑色のマスを選んでください。";
  }else{
-  hint.style.display="none";
+  hint.textContent="人口を増やす準備：食料を十分に確保し、住居に空きを作り、満足度を保ちましょう。人口は条件を満たすと10日ごとに1人増えます。";
  }
 }
 function buildMenu(){
@@ -1650,6 +1661,7 @@ function selectLogicalCell(hit){
  selectedCellOutline=new THREE.LineSegments(geometry,material);
  selectedCellOutline.renderOrder=21;scene.add(selectedCellOutline);
  updateStartGoals();
+ updateFirstBuildHint();
  saveGame(false);
  const terrainNames={plain:"平地",forest:"森林",hill:"丘陵",mountain:"山地",beach:"海岸",river:"川",lake:"湖",snow:"雪原",sea:"海"};
  const farmSuit=Math.round(localFarmPotential(center.x,center.z)*100);
@@ -1673,6 +1685,7 @@ function setInteractionMode(mode){
  document.getElementById("inspect").textContent=interactionMode==="move"
   ?"移動モードです。マスを選択するには選択モードに切り替えてください。"
   :"マスをタップして選択してください。カメラは移動しません。";
+ updateFirstBuildHint();
 }
 document.getElementById("modeBtn").addEventListener("click",()=>{
  setInteractionMode(interactionMode==="move"?"select":"move");
