@@ -745,7 +745,21 @@ treeLeaves.instanceMatrix.needsUpdate=true;
 if(treeLeaves.instanceColor)treeLeaves.instanceColor.needsUpdate=true;
 scene.add(treeTrunks,treeLeaves);
 
-// 岩場：高地や山のふもとに小さな岩を配置する。
+// 石材鉱床：集落から少し離れた丘陵に、探索して見つける採石候補地を生成する。
+const stoneDepositCenters=[];
+for(let attempt=0;attempt<5000&&stoneDepositCenters.length<3;attempt++){
+ const angle=random()*Math.PI*2;
+ const distance=52+random()*72;
+ const x=START_PLAIN.x+Math.cos(angle)*distance;
+ const z=START_PLAIN.z+Math.sin(angle)*distance;
+ const d=terrainData(x,z);
+ if(!d.land||d.kind!=="hill"||d.height<5||["snow","river","lake","beach"].includes(d.kind))continue;
+ if(stoneDepositCenters.some(p=>Math.hypot(p.x-x,p.z-z)<30))continue;
+ stoneDepositCenters.push({x,z,radius:17+random()*3});
+}
+
+// 岩場：高地や鉱床の周辺に岩を配置する。鉱床では岩がまとまって見える。
+
 const MAX_ROCKS=Math.round(520*({low:0.65,normal:1,high:1.4}[savedWorldSettings.resources]||1));
 const rockGeometry=new THREE.DodecahedronGeometry(1,0);
 const rockMaterial=new THREE.MeshStandardMaterial({color:0x77776e,roughness:1});
@@ -757,7 +771,8 @@ for(let i=0;i<MAX_ROCKS*3&&rockCount<MAX_ROCKS;i++){
  const z=(random()-0.5)*WORLD_SIZE;
  const data=terrainData(x,z);
  if(!data.land||isStartingPlain(x,z)||data.height<5||["beach","river","lake","snow"].includes(data.kind))continue;
- if(random()>0.42)continue;
+ const depositInfluence=stoneDepositCenters.reduce((best,p)=>Math.max(best,THREE.MathUtils.clamp(1-Math.hypot(p.x-x,p.z-z)/p.radius,0,1)),0);
+ if(random()>(0.22+depositInfluence*0.72))continue;
  const size=0.35+random()*1.15;
  dummy.position.set(x,data.height+size*0.32,z);
  dummy.scale.set(size,size*(0.55+random()*0.55),size*(0.7+random()*0.5));
@@ -886,8 +901,10 @@ function resourcePlacementCheck(type,x,z){
   return value>=0.22?{valid:true,reason:""}:{valid:false,reason:"近くに十分な森林がありません。森の縁を探してください。"};
  }
  if(type==="quarry"){
-  const d=terrainData(x,z);
-  return d.kind==="hill"&&d.height>=5?{valid:true,reason:""}:{valid:false,reason:"採石場には岩の多い丘陵地が必要です。"};
+  const d=terrainData(x,z),stone=localStonePotential(x,z);
+  return d.kind==="hill"&&d.height>=5&&stone>=0.28
+   ?{valid:true,reason:""}
+   :{valid:false,reason:"石材鉱床が必要です。岩が集まった丘陵を探索してください。"};
  }
  return {valid:true,reason:""};
 }
@@ -1090,11 +1107,23 @@ function localFarmPotential(x,z){
  else if(d.kind==="beach")value=0.45;
  value*=THREE.MathUtils.clamp(0.82+d.moisture*0.34,0.72,1.12);
  value*=THREE.MathUtils.clamp(0.82+d.temperature*0.24,0.78,1.04);
+ // 川岸・湖岸は水分に恵まれ、農地として少し有利になる。
+ const riverBonus=0.12*Math.exp(-Math.pow(riverDistance(x,z)/8,2));
+ const lakeBonus=0.10*Math.exp(-Math.pow((lakeDistance(x,z)-1.08)/0.72,2));
+ value*=1+Math.max(riverBonus,lakeBonus);
  return THREE.MathUtils.clamp(value,0.45,1.2);
 }
 function localForestPotential(x,z){
  const density=forestDensity(x,z);
  return density<0.12?0:THREE.MathUtils.clamp(density*1.8,0,1.5);
+}
+function localStonePotential(x,z){
+ let best=0;
+ for(const p of stoneDepositCenters){
+  const distance=Math.hypot(p.x-x,p.z-z);
+  best=Math.max(best,THREE.MathUtils.clamp(1-distance/p.radius,0,1));
+ }
+ return best;
 }
 function updateEconomyReport(){
  const r=gameState.lastDailyReport;
@@ -1640,7 +1669,7 @@ function advanceDay(){
  if(gameState.day%3===0){
   const woodPotential=cutters.reduce((sum,b)=>sum+2*localForestPotential(b.x,b.z),0);
   const produced=Math.floor(woodPotential*labor.wood);
-  const stonePotential=quarries.reduce((sum,b)=>sum+(terrainData(b.x,b.z).kind==="hill"?1.6:0.65),0);
+  const stonePotential=quarries.reduce((sum,b)=>sum+1.6*localStonePotential(b.x,b.z),0);
   const stone=Math.floor(stonePotential*labor.stone);
   const woodBefore=gameState.wood,stoneBefore=gameState.stone;
   gameState.wood=Math.min(capacity,gameState.wood+produced);
@@ -1690,7 +1719,7 @@ function buildingPlacementSummary(type,x,z){
  if(type==="hut")return cost+" / 住居定員 +"+(b.capacity||0);
  if(type==="farm")return cost+" / 農業適性 "+Math.round(localFarmPotential(x,z)*100)+"%・食料見込み：約"+Math.floor(6*localFarmPotential(x,z))+"（5日ごと）";
  if(type==="woodcutter")return cost+" / 森林資源 "+Math.round(localForestPotential(x,z)*100)+"%・木材見込み：約"+Math.floor(2*localForestPotential(x,z))+"（3日ごと）";
- if(type==="quarry")return cost+" / 丘陵・岩場で採石";
+ if(type==="quarry")return cost+" / 石材鉱床 "+Math.round(localStonePotential(x,z)*100)+"%・鉱床の中心ほど採石量が増加";
  return cost+" / "+b.desc;
 }
 function updateCellPreview(event){
@@ -1766,7 +1795,8 @@ function selectLogicalCell(hit){
  const terrainNames={plain:"平地",forest:"森林",hill:"丘陵",mountain:"山地",beach:"海岸",river:"川",lake:"湖",snow:"雪原",sea:"海"};
  const farmSuit=Math.round(localFarmPotential(center.x,center.z)*100);
  const forestSuit=Math.round(localForestPotential(center.x,center.z)*100);
- const resourceInfo=" / 農業適性 "+farmSuit+"% / 森林資源 "+forestSuit+"%";
+ const stoneSuit=Math.round(localStonePotential(center.x,center.z)*100);
+ const resourceInfo=" / 農業適性 "+farmSuit+"% / 森林資源 "+forestSuit+"% / 石材鉱床 "+stoneSuit+"%";
  document.getElementById("inspect").textContent=
   "選択マス ("+(ix+1)+", "+(iz+1)+") / 地形："+(terrainNames[terrain.kind]||terrain.kind||"不明")+
   resourceInfo+" / 建物："+(building?buildingTypes[building.type].name:"なし")+" / 道路："+(roadCellSet.has(key)?"あり":"なし");
