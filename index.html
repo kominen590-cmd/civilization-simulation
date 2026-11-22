@@ -1284,7 +1284,7 @@ function restoreRoads(){
  roadGroup.children.forEach(mesh=>{mesh.geometry?.dispose();if(mesh.material)mesh.material.dispose();});
  roadGroup.clear();roadCellSet.clear();
  if(!Array.isArray(gameState.roads))gameState.roads=[];
- gameState.roads=gameState.roads.filter(key=>{if(typeof key!=="string"||!/^\\d+,\\d+$/.test(key))return false;const [ix,iz]=key.split(",").map(Number);return ix>=0&&iz>=0&&ix<GRID_CELLS&&iz<GRID_CELLS;});
+ gameState.roads=gameState.roads.filter(key=>{if(typeof key!=="string"||!/^\d+,\d+$/.test(key))return false;const [ix,iz]=key.split(",").map(Number);return ix>=0&&iz>=0&&ix<GRID_CELLS&&iz<GRID_CELLS;});
  gameState.roads=[...new Set(gameState.roads)];
  gameState.roads.forEach(key=>{const [ix,iz]=key.split(",").map(Number);roadCellSet.add(key);addRoadMesh(ix,iz);});
 }
