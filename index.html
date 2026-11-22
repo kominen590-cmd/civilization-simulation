@@ -602,7 +602,8 @@ geometry.computeVertexNormals();
 const surfacePixels=new Uint8Array(128*128*4);
 for(let py=0;py<128;py++)for(let px=0;px<128;px++){
  const n1=hash(px*1.7,py*1.9),n2=hash(px*4.3+17,py*3.7-9);
- const v=Math.round(112+n1*82+n2*42),k=(py*128+px)*4;
+ const ripple=(Math.sin(px*0.19+Math.sin(py*0.07)*2)+Math.sin(py*0.16+Math.cos(px*0.05)*2))*5;
+ const v=Math.round(112+n1*70+n2*35+ripple),k=(py*128+px)*4;
  surfacePixels[k]=v;surfacePixels[k+1]=v;surfacePixels[k+2]=v;surfacePixels[k+3]=255;
 }
 const surfaceBump=new THREE.DataTexture(surfacePixels,128,128,THREE.RGBAFormat);
@@ -611,11 +612,27 @@ surfaceBump.repeat.set(42,42);
 surfaceBump.colorSpace=THREE.NoColorSpace;
 surfaceBump.needsUpdate=true;
 
+// 地面の色むら用テクスチャ。頂点カラーのバイオーム色を保ちながら、土・草地に微細な自然変化を重ねる。
+const terrainColorPixels=new Uint8Array(256*256*4);
+for(let py=0;py<256;py++)for(let px=0;px<256;px++){
+ const broad=hash(px*0.8+29,py*0.8-13),grain=hash(px*3.7+101,py*4.1-67);
+ const fleck=hash(Math.floor(px/3)*1.9,Math.floor(py/3)*2.1);
+ const value=Math.round(222+broad*20+grain*12+(fleck>0.86?8:0));
+ const k=(py*256+px)*4;
+ terrainColorPixels[k]=value;terrainColorPixels[k+1]=value;terrainColorPixels[k+2]=value;terrainColorPixels[k+3]=255;
+}
+const terrainColorTexture=new THREE.DataTexture(terrainColorPixels,256,256,THREE.RGBAFormat);
+terrainColorTexture.wrapS=terrainColorTexture.wrapT=THREE.RepeatWrapping;
+terrainColorTexture.repeat.set(34,34);
+terrainColorTexture.colorSpace=THREE.SRGBColorSpace;
+terrainColorTexture.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
+terrainColorTexture.needsUpdate=true;
+
 const terrain=new THREE.Mesh(
  geometry,
  new THREE.MeshStandardMaterial({
-  vertexColors:true,roughness:0.96,metalness:0,
-  bumpMap:surfaceBump,bumpScale:0.13
+  vertexColors:true,map:terrainColorTexture,roughness:0.98,metalness:0,
+  bumpMap:surfaceBump,bumpScale:0.105
  })
 );
 terrain.receiveShadow=true;
@@ -625,8 +642,9 @@ scene.add(terrain);
 const ocean=new THREE.Mesh(
  new THREE.PlaneGeometry(500,500),
  new THREE.MeshPhysicalMaterial({
-  color:0x397f9d,roughness:0.2,metalness:0.02,
-  clearcoat:0.32,clearcoatRoughness:0.24
+  color:0x397f9d,roughness:0.22,metalness:0.015,
+  clearcoat:0.42,clearcoatRoughness:0.18,
+  bumpMap:surfaceBump,bumpScale:0.035
  })
 );
 ocean.rotation.x=-Math.PI/2;
@@ -656,8 +674,9 @@ for(const lake of lakes){
 
 // 川：陸地上の区間だけ描画
 const riverMaterial=new THREE.MeshPhysicalMaterial({
- color:0x397f9f,roughness:0.17,metalness:0.02,
- clearcoat:0.38,clearcoatRoughness:0.22
+ color:0x397f9f,roughness:0.19,metalness:0.015,
+ clearcoat:0.4,clearcoatRoughness:0.18,
+ bumpMap:surfaceBump,bumpScale:0.045
 });
 for(const curve of riverCurves){
  let segment=[];
@@ -795,8 +814,16 @@ for(let attempt=0;attempt<5000&&stoneDepositCenters.length<3;attempt++){
 // 岩場：高地や鉱床の周辺に岩を配置する。鉱床では岩がまとまって見える。
 
 const MAX_ROCKS=Math.round(520*({low:0.65,normal:1,high:1.4}[savedWorldSettings.resources]||1));
-const rockGeometry=new THREE.DodecahedronGeometry(1,1);
-const rockMaterial=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.94,metalness:0.015});
+const rockGeometry=new THREE.DodecahedronGeometry(1,2);
+const rockPositions=rockGeometry.attributes.position;
+for(let v=0;v<rockPositions.count;v++){
+ const point=new THREE.Vector3().fromBufferAttribute(rockPositions,v);
+ const radial=0.88+hash(v*1.73,SEED+v*0.37)*0.24;
+ point.multiplyScalar(radial);
+ rockPositions.setXYZ(v,point.x,point.y,point.z);
+}
+rockGeometry.computeVertexNormals();rockGeometry.computeBoundingSphere();
+const rockMaterial=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.97,metalness:0.005});
 const rocks=new THREE.InstancedMesh(rockGeometry,rockMaterial,MAX_ROCKS);
 let rockCount=0;
 const rockLocations=[];
@@ -816,13 +843,40 @@ for(let i=0;i<MAX_ROCKS*3&&rockCount<MAX_ROCKS;i++){
  const rockTint=new THREE.Color().setHSL(0.10+random()*0.025,0.035,0.37+random()*0.17);
  rocks.setColorAt(rockCount,rockTint);
  rockCount++;
- rockLocations.push({x,z});
+ rockLocations.push({x,z,size});
 }
 rocks.count=rockCount;
 rocks.instanceMatrix.needsUpdate=true;
 if(rocks.instanceColor)rocks.instanceColor.needsUpdate=true;
 rocks.castShadow=false;
 scene.add(rocks);
+
+// 岩の周囲に小石を散らし、岩場と地面の境界を自然につなぐ。共有ジオメトリ＋InstancedMeshで軽量化。
+const pebbleGeometry=new THREE.DodecahedronGeometry(0.16,1);
+const pebbleMaterial=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.99});
+const pebbles=new THREE.InstancedMesh(pebbleGeometry,pebbleMaterial,MAX_ROCKS*4);
+const pebbleDummy=new THREE.Object3D();
+let pebbleCount=0;
+for(let i=0;i<rockLocations.length;i++){
+ const rock=rockLocations[i],count=2+Math.floor(hash(i+71,SEED+991)*3);
+ for(let n=0;n<count&&pebbleCount<MAX_ROCKS*4;n++){
+  const angle=hash(i*7+n*13,SEED+313)*Math.PI*2;
+  const distance=rock.size*(0.55+hash(i*11+n*5,SEED+617)*0.85);
+  const px=rock.x+Math.cos(angle)*distance,pz=rock.z+Math.sin(angle)*distance;
+  const ground=terrainData(px,pz);
+  if(!ground.land||["river","lake","sea","snow"].includes(ground.kind))continue;
+  const scale=0.45+hash(i*17+n*19,SEED+811)*0.9;
+  pebbleDummy.position.set(px,ground.height+0.07,pz);
+  pebbleDummy.scale.set(scale,scale*(0.55+hash(i+n,SEED+37)*0.35),scale);
+  pebbleDummy.rotation.set(hash(i+n,SEED+47)*0.5,angle,hash(i+n,SEED+57)*0.5);
+  pebbleDummy.updateMatrix();pebbles.setMatrixAt(pebbleCount,pebbleDummy.matrix);
+  const tint=new THREE.Color().setHSL(0.10,0.025,0.38+hash(i*3+n*7,SEED+71)*0.16);
+  pebbles.setColorAt(pebbleCount,tint);pebbleCount++;
+ }
+}
+pebbles.count=pebbleCount;pebbles.instanceMatrix.needsUpdate=true;
+if(pebbles.instanceColor)pebbles.instanceColor.needsUpdate=true;
+pebbles.castShadow=false;pebbles.receiveShadow=true;scene.add(pebbles);
 
 // 草むら：遠景の地面に細かな自然物を加える。InstancedMeshで描画負荷を抑える。
 const grassGeometry=new THREE.BufferGeometry();
@@ -880,29 +934,29 @@ bushes.count=bushCount;bushes.instanceMatrix.needsUpdate=true;
 bushes.castShadow=false;if(bushes.instanceColor)bushes.instanceColor.needsUpdate=true;scene.add(bushes);
 
 // 雲：複数の球を組み合わせる
+const cloudGeometry=new THREE.SphereGeometry(1,14,10);
 const cloudMaterial=new THREE.MeshStandardMaterial({
- color:0xffffff,transparent:true,opacity:0.66,roughness:1
+ color:0xffffff,transparent:true,opacity:0.72,roughness:1,depthWrite:false
 });
 
 const clouds=[];
 for(let i=0;i<16;i++){
  const group=new THREE.Group();
- const count=3+Math.floor(random()*4);
+ const count=4+Math.floor(random()*4);
 
  for(let j=0;j<count;j++){
-  const puff=new THREE.Mesh(
-   new THREE.SphereGeometry(1,9,7),cloudMaterial
-  );
+  const puff=new THREE.Mesh(cloudGeometry,cloudMaterial);
   puff.position.set(
    (random()-0.5)*7,
    random()*1.2,
    (random()-0.5)*5
   );
   puff.scale.set(
-   3+random()*3,
-   1+random()*1.1,
-   2+random()*2
+   2.8+random()*3.4,
+   0.75+random()*0.95,
+   2.1+random()*2.5
   );
+  puff.rotation.y=random()*Math.PI*2;
   group.add(puff);
  }
 
@@ -2330,6 +2384,7 @@ function animate(now=0){
  for(const cloud of clouds){
   cloud.position.x+=cloud.userData.drift*delta;
   if(cloud.position.x>155)cloud.position.x=-155;
+  cloud.position.y+=Math.sin(now*0.00008+cloud.position.z)*delta*0.035;
  }
  controls.update();
  clampCameraToWorld();
