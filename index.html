@@ -926,10 +926,10 @@ for(let b=0;b<5;b++){
 grassGeometry.setAttribute("position",new THREE.Float32BufferAttribute(bladeVertices,3));
 grassGeometry.computeVertexNormals();grassGeometry.computeBoundingSphere();
 const grassMaterial=new THREE.MeshStandardMaterial({color:0x829653,roughness:1,side:THREE.DoubleSide});
-const grass=new THREE.InstancedMesh(grassGeometry,grassMaterial,1050);
+const grass=new THREE.InstancedMesh(grassGeometry,grassMaterial,2200);
 const grassDummy=new THREE.Object3D();
 let grassCount=0;
-for(let i=0;i<1050;i++){
+for(let i=0;i<2200;i++){
  const x=(hash(i*17+31,SEED+91)-0.5)*WORLD_SIZE,z=(hash(i*29+73,SEED+177)-0.5)*WORLD_SIZE,d=terrainData(x,z);
  if(!d.land||["sea","river","lake","beach","snow","mountain"].includes(d.kind))continue;
  if(!isStartingPlain(x,z)&&forestDensity(x,z)<0.08&&hash(i+991,SEED+7)>0.22)continue;
@@ -949,9 +949,9 @@ grass.castShadow=false;scene.add(grass);
 // 低木：森林の縁や湿った平地に点在させ、木々の足元を自然につなぐ。
 const bushGeometry=new THREE.IcosahedronGeometry(0.72,2);
 const bushMaterial=new THREE.MeshStandardMaterial({color:0x527443,roughness:1});
-const bushes=new THREE.InstancedMesh(bushGeometry,bushMaterial,280);
+const bushes=new THREE.InstancedMesh(bushGeometry,bushMaterial,420);
 let bushCount=0;
-for(let i=0;i<280;i++){
+for(let i=0;i<420;i++){
  const x=(hash(i*11+401,SEED+301)-0.5)*WORLD_SIZE;
  const z=(hash(i*19+503,SEED+401)-0.5)*WORLD_SIZE;
  const d=terrainData(x,z);
@@ -965,6 +965,39 @@ for(let i=0;i<280;i++){
 }
 bushes.count=bushCount;bushes.instanceMatrix.needsUpdate=true;
 bushes.castShadow=false;if(bushes.instanceColor)bushes.instanceColor.needsUpdate=true;scene.add(bushes);
+
+// 草地や林縁に控えめな野花を点在させ、単調な緑一色の地面を避ける。
+const flowerStemGeometry=new THREE.CylinderGeometry(0.012,0.02,0.30,5);
+const flowerHeadGeometry=new THREE.SphereGeometry(0.075,8,6);
+const flowerStemMaterial=new THREE.MeshStandardMaterial({color:0x54733d,roughness:1});
+const flowerHeadMaterial=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.88});
+const flowerStems=new THREE.InstancedMesh(flowerStemGeometry,flowerStemMaterial,320);
+const flowerHeads=new THREE.InstancedMesh(flowerHeadGeometry,flowerHeadMaterial,320);
+const flowerDummy=new THREE.Object3D();
+let flowerCount=0;
+for(let i=0;i<320;i++){
+ const x=(hash(i*23+907,SEED+1201)-0.5)*WORLD_SIZE;
+ const z=(hash(i*31+613,SEED+1301)-0.5)*WORLD_SIZE;
+ const data=terrainData(x,z);
+ if(!data.land||["sea","river","lake","beach","snow","mountain"].includes(data.kind)||data.moisture<0.24||data.temperature<0.18)continue;
+ if(!isStartingPlain(x,z)&&forestDensity(x,z)<0.12&&data.plains<0.45)continue;
+ const height=data.height,scale=0.65+hash(i+17,SEED+1401)*0.75;
+ flowerDummy.position.set(x,height+0.15*scale,z);
+ flowerDummy.scale.setScalar(scale);
+ flowerDummy.rotation.set(0,hash(i+29,SEED+1501)*Math.PI*2,0);
+ flowerDummy.updateMatrix();flowerStems.setMatrixAt(flowerCount,flowerDummy.matrix);
+ flowerDummy.position.y=height+0.31*scale;
+ flowerDummy.scale.setScalar(scale);
+ flowerDummy.updateMatrix();flowerHeads.setMatrixAt(flowerCount,flowerDummy.matrix);
+ const palette=[0xe5dfc7,0xd6c78a,0xb8a9c7,0xd7d5cf];
+ flowerHeads.setColorAt(flowerCount,new THREE.Color(palette[Math.floor(hash(i+41,SEED+1601)*palette.length)]));
+ flowerCount++;
+}
+flowerStems.count=flowerCount;flowerHeads.count=flowerCount;
+flowerStems.instanceMatrix.needsUpdate=true;flowerHeads.instanceMatrix.needsUpdate=true;
+if(flowerHeads.instanceColor)flowerHeads.instanceColor.needsUpdate=true;
+flowerStems.castShadow=false;flowerHeads.castShadow=false;
+scene.add(flowerStems,flowerHeads);
 
 // 雲：複数の球を組み合わせる
 const cloudGeometry=new THREE.SphereGeometry(1,14,10);
