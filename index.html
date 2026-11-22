@@ -613,7 +613,7 @@ scene.add(ocean);
 
 // 湖の水面：地形のくぼみに合わせる
 const lakeMaterial=new THREE.MeshStandardMaterial({
- color:0x438eae,roughness:0.28,metalness:0.04
+ color:0x438eae,roughness:0.19,metalness:0.08
 });
 for(const lake of lakes){
  if(!isLand(lake.x,lake.z)||isStartingPlain(lake.x,lake.z))continue;
@@ -633,7 +633,7 @@ for(const lake of lakes){
 
 // 川：陸地上の区間だけ描画
 const riverMaterial=new THREE.MeshStandardMaterial({
- color:0x438eae,roughness:0.3
+ color:0x438eae,roughness:0.2,metalness:0.06
 });
 for(const curve of riverCurves){
  let segment=[];
@@ -662,7 +662,7 @@ for(const curve of riverCurves){
 
 // 森林：群落を作る
 const trunkGeometry=new THREE.CylinderGeometry(0.11,0.2,1.25,7);
-const leafGeometry=new THREE.ConeGeometry(0.92,2.65,8);
+const leafGeometry=new THREE.IcosahedronGeometry(0.88,1);
 const trunkMaterial=new THREE.MeshStandardMaterial({color:0x705039});
 const leafMaterial=new THREE.MeshStandardMaterial({color:0xffffff});
 
@@ -737,9 +737,11 @@ for(let i=0;i<MAX_TREES;i++){
  dummy.updateMatrix();
  treeTrunks.setMatrixAt(treeCount,dummy.matrix);
 
- dummy.position.set(x,y+2*scale,z);
+ dummy.position.set(x,y+2.05*scale,z);
+ dummy.scale.set(1.22*scale,1.48*scale,1.12*scale);
  dummy.updateMatrix();
  treeLeaves.setMatrixAt(treeCount,dummy.matrix);
+ dummy.scale.setScalar(scale);
  const leafColor=new THREE.Color();
  if(moisture>0.72)leafColor.setHex(0x244d3c);
  else if(data.temperature<0.28)leafColor.setHex(0x426044);
@@ -755,6 +757,7 @@ treeLeaves.count=treeCount;
 treeTrunks.instanceMatrix.needsUpdate=true;
 treeLeaves.instanceMatrix.needsUpdate=true;
 if(treeLeaves.instanceColor)treeLeaves.instanceColor.needsUpdate=true;
+treeTrunks.castShadow=false;treeLeaves.castShadow=false;
 scene.add(treeTrunks,treeLeaves);
 
 // 石材鉱床：集落から少し離れた丘陵に、探索して見つける採石候補地を生成する。
@@ -795,7 +798,53 @@ for(let i=0;i<MAX_ROCKS*3&&rockCount<MAX_ROCKS;i++){
 }
 rocks.count=rockCount;
 rocks.instanceMatrix.needsUpdate=true;
+rocks.castShadow=false;
 scene.add(rocks);
+
+// 草むら：遠景の地面に細かな自然物を加える。InstancedMeshで描画負荷を抑える。
+const grassGeometry=new THREE.ConeGeometry(0.075,0.48,4);
+const grassMaterial=new THREE.MeshStandardMaterial({color:0x829653,roughness:1});
+const grass=new THREE.InstancedMesh(grassGeometry,grassMaterial,1050);
+const grassDummy=new THREE.Object3D();
+let grassCount=0;
+for(let i=0;i<1050;i++){
+ const x=(hash(i*17+31,SEED+91)-0.5)*WORLD_SIZE;
+ const z=(hash(i*29+73,SEED+177)-0.5)*WORLD_SIZE;
+ const d=terrainData(x,z);
+ if(!d.land||["sea","river","lake","beach","snow","mountain"].includes(d.kind))continue;
+ if(!isStartingPlain(x,z)&&forestDensity(x,z)<0.08&&hash(i+991,SEED+7)>0.22)continue;
+ grassDummy.position.set(x,d.height+0.2,z);
+ const size=0.45+hash(i+41,SEED+13)*0.8;
+ grassDummy.scale.set(size,size,size);
+ grassDummy.rotation.set(0,hash(i+57,SEED+19)*Math.PI*2,0);
+ grassDummy.updateMatrix();grass.setMatrixAt(grassCount,grassDummy.matrix);
+ const tint=new THREE.Color(d.moisture>0.65?0x77934a:0x9a9a55);
+ tint.multiplyScalar(0.82+hash(i+63,SEED+29)*0.36);
+ grass.setColorAt(grassCount,tint);grassCount++;
+}
+grass.count=grassCount;grass.instanceMatrix.needsUpdate=true;
+if(grass.instanceColor)grass.instanceColor.needsUpdate=true;
+grass.castShadow=false;scene.add(grass);
+
+// 低木：森林の縁や湿った平地に点在させ、木々の足元を自然につなぐ。
+const bushGeometry=new THREE.IcosahedronGeometry(0.72,1);
+const bushMaterial=new THREE.MeshStandardMaterial({color:0x527443,roughness:1});
+const bushes=new THREE.InstancedMesh(bushGeometry,bushMaterial,280);
+let bushCount=0;
+for(let i=0;i<280;i++){
+ const x=(hash(i*11+401,SEED+301)-0.5)*WORLD_SIZE;
+ const z=(hash(i*19+503,SEED+401)-0.5)*WORLD_SIZE;
+ const d=terrainData(x,z);
+ if(!d.land||isStartingPlain(x,z)||["river","lake","beach","snow","mountain"].includes(d.kind))continue;
+ if(forestDensity(x,z)<0.22)continue;
+ grassDummy.position.set(x,d.height+0.38,z);
+ const scale=0.55+hash(i+601,SEED+501)*0.65;
+ grassDummy.scale.set(scale*1.2,scale*0.72,scale);
+ grassDummy.rotation.set(0,hash(i+701,SEED+601)*Math.PI,0);
+ grassDummy.updateMatrix();bushes.setMatrixAt(bushCount++,grassDummy.matrix);
+}
+bushes.count=bushCount;bushes.instanceMatrix.needsUpdate=true;
+bushes.castShadow=false;scene.add(bushes);
 
 // 雲：複数の球を組み合わせる
 const cloudMaterial=new THREE.MeshStandardMaterial({
@@ -1059,7 +1108,9 @@ const residentAgents=[];
 const residentBodyGeometry=new THREE.CylinderGeometry(0.25,0.3,0.9,7);
 const residentHeadGeometry=new THREE.SphereGeometry(0.23,8,6);
 const residentLegGeometry=new THREE.CylinderGeometry(0.09,0.1,0.48,5);
-const residentArmGeometry=new THREE.CylinderGeometry(0.075,0.09,0.55,5);
+const residentArmGeometry=new THREE.CylinderGeometry(0.075,0.09,0.55,7);
+const residentHairGeometry=new THREE.SphereGeometry(0.235,9,7);
+const residentBootGeometry=new THREE.BoxGeometry(0.19,0.13,0.28);
 const residentColors=[0x527b9b,0x9b6847,0x718b55,0x8b719d,0xb08a45,0x547f78];
 let activeTool=null;
 let interactionMode="move"; // move: camera/build, select: choose a logical cell
@@ -1523,10 +1574,15 @@ function syncResidentVisuals(){
   const material=new THREE.MeshStandardMaterial({color:residentColors[i%residentColors.length],roughness:0.9});
   const skin=new THREE.MeshStandardMaterial({color:i%3===0?0xc99468:0xd8aa7d,roughness:0.95});
   const dark=new THREE.MeshStandardMaterial({color:0x443a32,roughness:1});
+  const hair=new THREE.MeshStandardMaterial({color:[0x40352c,0x59412e,0x292b2b,0x72583e][i%4],roughness:1});
   const body=new THREE.Mesh(residentBodyGeometry,material);body.position.y=1.0;group.add(body);
   const head=new THREE.Mesh(residentHeadGeometry,skin);head.position.y=1.62;group.add(head);
+  const hairCap=new THREE.Mesh(residentHairGeometry,hair);hairCap.position.set(0,1.77,-0.035);hairCap.scale.set(1.02,0.62,1.02);group.add(hairCap);
+  const belt=new THREE.Mesh(new THREE.CylinderGeometry(0.255,0.27,0.12,8),dark);belt.position.y=0.76;group.add(belt);
   const leftLeg=new THREE.Mesh(residentLegGeometry,dark);leftLeg.position.set(-0.13,0.31,0);group.add(leftLeg);
   const rightLeg=new THREE.Mesh(residentLegGeometry,dark);rightLeg.position.set(0.13,0.31,0);group.add(rightLeg);
+  const leftBoot=new THREE.Mesh(residentBootGeometry,dark);leftBoot.position.set(-0.13,0.08,0.055);group.add(leftBoot);
+  const rightBoot=new THREE.Mesh(residentBootGeometry,dark);rightBoot.position.set(0.13,0.08,0.055);group.add(rightBoot);
   const leftArm=new THREE.Mesh(residentArmGeometry,material);leftArm.position.set(-0.31,1.02,0);leftArm.rotation.z=0.18;group.add(leftArm);
   const rightArm=new THREE.Mesh(residentArmGeometry,material);rightArm.position.set(0.31,1.02,0);rightArm.rotation.z=-0.18;group.add(rightArm);
   const toolGroup=new THREE.Group();toolGroup.position.set(0.39,1.02,0.18);group.add(toolGroup);
