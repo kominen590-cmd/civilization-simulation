@@ -1416,7 +1416,8 @@ function updateFirstBuildHint(){
  const modeButton=document.getElementById("modeBtn");
  if(hutButton)hutButton.classList.toggle("recommended",!!current&&current.id==="housing"&&!activeTool);
  if(woodButton)woodButton.classList.toggle("recommended",!!current&&current.id==="wood"&&!activeTool);
- if(modeButton)modeButton.classList.toggle("recommended",!!current&&current.id==="survey"&&interactionMode==="move");
+ const needsModeSwitch=!!current&&((current.id==="survey"&&interactionMode==="move")||(current.id==="scout"&&interactionMode==="select"));
+ if(modeButton)modeButton.classList.toggle("recommended",needsModeSwitch);
  hint.style.display=current?"block":"none";
  if(!current)return;
  if(activeTool){
@@ -2112,14 +2113,9 @@ function loadGame(){
   const usableLegacy=legacyData&&legacyData.seed===SEED?legacy:null;
   if(raw||usableLegacy){loadGameData(JSON.parse(raw||usableLegacy));showMessage("前回のセーブを読み込みました");}
   else{
-   // 新しい文明の初期集落。住居と小さな農地から開始する。
-   gameState.buildings=[
-    {id:gameState.nextId++,type:"hut",x:-58,z:-22,builtDay:1},
-    {id:gameState.nextId++,type:"farm",x:-24,z:-32,builtDay:1}
-   ];
-   restoreBuildings();
-   updateHUD();
-   saveGame(false);
+   // セーブがない状態で続きからを選んだ場合も、正規の新規開始処理で初期化する。
+   initializeNewGame();
+   showStartBriefing();
   }
  }catch(e){showMessage("セーブデータを読み込めませんでした");}
 }
@@ -2386,7 +2382,7 @@ function enterGame(mode){
   showStartBriefing();
  }else{
   loadGame();
-  gameState.paused=false;
+  if(!document.getElementById("startBriefing").classList.contains("active"))gameState.paused=false;
  }
  updateHUD();
 }
