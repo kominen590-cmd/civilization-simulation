@@ -293,6 +293,10 @@ const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:"high-per
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
 renderer.setSize(innerWidth,innerHeight);
 renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.08;
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
 
 const controls=new OrbitControls(camera,renderer.domElement);
@@ -308,8 +312,15 @@ controls.maxDistance=230;
 controls.target.set(-48,0,-18);
 
 scene.add(new THREE.HemisphereLight(0xffffff,0x617052,2));
-const sun=new THREE.DirectionalLight(0xfff2d9,2.1);
+const sun=new THREE.DirectionalLight(0xfff2d9,2.35);
 sun.position.set(-70,110,55);
+sun.castShadow=true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.camera.left=-115;sun.shadow.camera.right=115;
+sun.shadow.camera.top=115;sun.shadow.camera.bottom=-115;
+sun.shadow.camera.near=1;sun.shadow.camera.far=300;
+sun.shadow.bias=-0.00018;
+sun.shadow.normalBias=0.035;
 scene.add(sun);
 
 function smooth(t){return t*t*(3-2*t)}
@@ -586,6 +597,7 @@ const terrain=new THREE.Mesh(
   vertexColors:true,roughness:1,metalness:0
  })
 );
+terrain.receiveShadow=true;
 scene.add(terrain);
 
 // 海面
@@ -649,8 +661,8 @@ for(const curve of riverCurves){
 }
 
 // 森林：群落を作る
-const trunkGeometry=new THREE.CylinderGeometry(0.13,0.19,1.2,5);
-const leafGeometry=new THREE.ConeGeometry(0.85,2.5,6);
+const trunkGeometry=new THREE.CylinderGeometry(0.11,0.2,1.25,7);
+const leafGeometry=new THREE.ConeGeometry(0.92,2.65,8);
 const trunkMaterial=new THREE.MeshStandardMaterial({color:0x705039});
 const leafMaterial=new THREE.MeshStandardMaterial({color:0xffffff});
 
@@ -1263,10 +1275,21 @@ function makeBuildingMesh(type,x,z){
  );
  body.position.y=baseY+0.45+height/2;group.add(body);
  if(type==="hut"||type==="store"){
-  const roof=new THREE.Mesh(new THREE.ConeGeometry(footprint*0.67,1.25,4),
-   new THREE.MeshStandardMaterial({color:type==="hut"?0x70452f:0x625044}));
-  roof.position.set(0,baseY+0.45+height+0.55,0);
-  roof.rotation.y=Math.PI/4;group.add(roof);
+  const roof=new THREE.Mesh(new THREE.ConeGeometry(footprint*0.70,1.28,4),
+   new THREE.MeshStandardMaterial({color:type==="hut"?0x70452f:0x625044,roughness:0.88}));
+  roof.position.set(0,baseY+0.45+height+0.58,0);
+  roof.rotation.y=Math.PI/4;roof.castShadow=true;roof.receiveShadow=true;group.add(roof);
+  // 正面の木製扉と小窓で建物の縮尺・生活感を補う。
+  const frontZ=footprint*0.82*0.5+0.012;
+  const door=new THREE.Mesh(new THREE.BoxGeometry(0.42,0.88,0.07),new THREE.MeshStandardMaterial({color:0x493326,roughness:0.92}));
+  door.position.set(0,baseY+0.45+0.44,frontZ);group.add(door);
+  const windowMat=new THREE.MeshStandardMaterial({color:0x8fa7a2,roughness:0.38,metalness:0.08});
+  for(const side of [-1,1]){
+   const windowMesh=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.34,0.055),windowMat);
+   windowMesh.position.set(side*footprint*0.23,baseY+0.45+height*0.64,frontZ);group.add(windowMesh);
+   const cross=new THREE.Mesh(new THREE.BoxGeometry(0.045,0.36,0.065),new THREE.MeshStandardMaterial({color:0x493326,roughness:1}));
+   cross.position.copy(windowMesh.position);group.add(cross);
+  }
  }
  if(type==="farm"){
   const cropPlants=[];
@@ -1302,6 +1325,9 @@ function makeBuildingMesh(type,x,z){
    chunk.rotation.set(rock*0.31,rock*0.57,rock*0.19);group.add(chunk);
   }
  }
+ group.traverse(object=>{
+  if(object.isMesh){object.castShadow=true;object.receiveShadow=true;}
+ });
  group.position.set(x,0,z);
  group.userData={baseY};
  return group;
