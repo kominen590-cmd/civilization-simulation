@@ -1258,13 +1258,14 @@ const roadCellSet=new Set();
 const residentGroup=new THREE.Group();
 scene.add(residentGroup);
 const residentAgents=[];
-const residentBodyGeometry=new THREE.CylinderGeometry(0.25,0.3,0.9,7);
-const residentHeadGeometry=new THREE.SphereGeometry(0.23,8,6);
-const residentLegGeometry=new THREE.CylinderGeometry(0.09,0.1,0.48,5);
-const residentArmGeometry=new THREE.CylinderGeometry(0.075,0.09,0.55,7);
-const residentHairGeometry=new THREE.SphereGeometry(0.235,9,7);
+// 住民の基本形状を滑らかなカプセル形状へ置き換え、近距離でも角張りすぎない体格にする。
+const residentBodyGeometry=new THREE.CapsuleGeometry(0.26,0.40,4,12);
+const residentHeadGeometry=new THREE.SphereGeometry(0.23,12,10);
+const residentLegGeometry=new THREE.CapsuleGeometry(0.085,0.30,3,9);
+const residentArmGeometry=new THREE.CapsuleGeometry(0.073,0.40,3,9);
+const residentHairGeometry=new THREE.SphereGeometry(0.235,12,10);
 const residentBootGeometry=new THREE.BoxGeometry(0.19,0.13,0.28);
-const residentColors=[0x527b9b,0x9b6847,0x718b55,0x8b719d,0xb08a45,0x547f78];
+const residentColors=[0x657b82,0x82624d,0x707b52,0x786b78,0x9a8050,0x54766e];
 let activeTool=null;
 let interactionMode="move"; // move: camera/build, select: choose a logical cell
 let selectedCell=null;
@@ -1911,7 +1912,7 @@ function syncResidentVisuals(){
  for(let i=0;i<visibleCount;i++){
   const group=new THREE.Group();
   const material=new THREE.MeshStandardMaterial({color:residentColors[i%residentColors.length],map:buildingTextures.fabric,roughness:0.96});
-  const skin=new THREE.MeshStandardMaterial({color:i%3===0?0xc99468:0xd8aa7d,roughness:0.95});
+  const skin=new THREE.MeshStandardMaterial({color:[0xc99468,0xd8aa7d,0xb98260,0xe0b895][i%4],roughness:0.96});
   const dark=new THREE.MeshStandardMaterial({color:0x443a32,roughness:1});
   const hair=new THREE.MeshStandardMaterial({color:[0x40352c,0x59412e,0x292b2b,0x72583e][i%4],roughness:1});
   const body=new THREE.Mesh(residentBodyGeometry,material);body.position.y=1.0;group.add(body);
