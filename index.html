@@ -289,7 +289,7 @@ const random=randomGenerator(SEED);
 
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0xb5cbd2);
-scene.fog=new THREE.Fog(0xb5cbd2,175,420);
+scene.fog=new THREE.Fog(0xb9d0d7,190,455);
 
 const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,700);
 camera.position.set(17,75,67);
@@ -325,12 +325,12 @@ scene.add(new THREE.HemisphereLight(0xeaf2f5,0x59634b,1.62));
 const fillLight=new THREE.DirectionalLight(0xc4d7e4,0.42);
 fillLight.position.set(75,38,-65);
 scene.add(fillLight);
-const sun=new THREE.DirectionalLight(0xfff3df,2.05);
+const sun=new THREE.DirectionalLight(0xffe8c9,2.25);
 sun.position.set(-70,110,55);
 sun.castShadow=true;
-sun.shadow.mapSize.set(1024,1024);
-sun.shadow.camera.left=-115;sun.shadow.camera.right=115;
-sun.shadow.camera.top=115;sun.shadow.camera.bottom=-115;
+sun.shadow.mapSize.set(1536,1536);
+sun.shadow.camera.left=-125;sun.shadow.camera.right=125;
+sun.shadow.camera.top=125;sun.shadow.camera.bottom=-125;
 sun.shadow.camera.near=1;sun.shadow.camera.far=300;
 sun.shadow.bias=-0.00018;
 sun.shadow.normalBias=0.035;
@@ -648,6 +648,21 @@ for(let i=0;i<positions.count;i++){
 
 geometry.setAttribute("color",new THREE.Float32BufferAttribute(colors,3));
 geometry.computeVertexNormals();
+const terrainNormals=geometry.attributes.normal;
+const terrainColors=geometry.attributes.color;
+const rockTone=new THREE.Color(0x77786f),snowTone=new THREE.Color(0xe2e8e7);
+for(let i=0;i<positions.count;i++){
+ const x=positions.getX(i),z=positions.getZ(i),data=terrainData(x,z);
+ if(isStartingPlain(x,z)||data.water)continue;
+ const ny=terrainNormals.getY(i);
+ const slope=THREE.MathUtils.smoothstep(0.88-ny,0.08,0.42);
+ const high=THREE.MathUtils.smoothstep(data.height,14,23);
+ const c=new THREE.Color().fromArray(colors,i*3);
+ if(data.height>7)c.lerp(rockTone,slope*0.82);
+ c.lerp(snowTone,high*0.88);
+ terrainColors.setXYZ(i,c.r,c.g,c.b);
+}
+terrainColors.needsUpdate=true;
 
 // 地面の質感：タイル境界が目立たない多段階ノイズで、草・土・小石の微細な起伏を表現。
 function tileNoise(x,y,cell,period){
@@ -776,9 +791,9 @@ terraceWalls.receiveShadow=true;terraceWalls.castShadow=true;scene.add(terraceWa
 const ocean=new THREE.Mesh(
  new THREE.PlaneGeometry(500,500),
  new THREE.MeshPhysicalMaterial({
-  color:0x397f9d,roughness:0.22,metalness:0.015,
-  clearcoat:0.42,clearcoatRoughness:0.18,
-  bumpMap:surfaceBump,bumpScale:0.035
+  color:0x397f9d,roughness:0.16,metalness:0.035,
+  clearcoat:0.68,clearcoatRoughness:0.12,
+  bumpMap:surfaceBump,bumpScale:0.045,envMapIntensity:1.15
  })
 );
 ocean.rotation.x=-Math.PI/2;
@@ -787,9 +802,9 @@ scene.add(ocean);
 
 // 湖の水面：地形のくぼみに合わせる
 const lakeMaterial=new THREE.MeshPhysicalMaterial({
- color:0x397f9f,roughness:0.16,metalness:0.025,
- clearcoat:0.42,clearcoatRoughness:0.2,
- bumpMap:surfaceBump,bumpScale:0.025
+ color:0x397f9f,roughness:0.12,metalness:0.035,
+ clearcoat:0.62,clearcoatRoughness:0.13,
+ bumpMap:surfaceBump,bumpScale:0.03,envMapIntensity:1.1
 });
 for(const lake of lakes){
  if(!isLand(lake.x,lake.z)||isStartingPlain(lake.x,lake.z))continue;
@@ -808,9 +823,9 @@ for(const lake of lakes){
 
 // 川：陸地上の区間だけ描画
 const riverMaterial=new THREE.MeshPhysicalMaterial({
- color:0x438eaa,roughness:0.14,metalness:0.01,
- clearcoat:0.58,clearcoatRoughness:0.14,
- bumpMap:surfaceBump,bumpScale:0.045
+ color:0x438eaa,roughness:0.11,metalness:0.025,
+ clearcoat:0.72,clearcoatRoughness:0.11,
+ bumpMap:surfaceBump,bumpScale:0.05,envMapIntensity:1.15
 });
 for(const curve of riverCurves){
  let segment=[];
@@ -829,10 +844,11 @@ for(const curve of riverCurves){
 
  for(const points of segments){
   const c=new THREE.CatmullRomCurve3(points);
-  const bank=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),1.52,8,false),new THREE.MeshStandardMaterial({color:0x78845e,roughness:1}));
+  const dampEarth=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),1.42,8,false),new THREE.MeshStandardMaterial({color:0x665b43,roughness:1}));
+   const bank=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),1.30,8,false),new THREE.MeshStandardMaterial({color:0x78845e,roughness:1}));
   const gravel=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),1.12,9,false),new THREE.MeshStandardMaterial({color:0xb2a27c,roughness:1}));
   const mesh=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),0.99,12,false),riverMaterial);
-  scene.add(bank,gravel,mesh);
+  scene.add(dampEarth,bank,gravel,mesh);
  }
 }
 
@@ -1173,44 +1189,30 @@ if(flowerHeads.instanceColor)flowerHeads.instanceColor.needsUpdate=true;
 flowerStems.castShadow=false;flowerHeads.castShadow=false;
 scene.add(flowerStems,flowerHeads);
 
-// 雲：複数の球を組み合わせる
-const cloudGeometry=new THREE.SphereGeometry(1,14,10);
-const cloudMaterial=new THREE.MeshStandardMaterial({
- color:0xffffff,transparent:true,opacity:0.72,roughness:1,depthWrite:false
-});
-
-const clouds=[];
-for(let i=0;i<16;i++){
- const group=new THREE.Group();
- const count=4+Math.floor(random()*4);
-
- for(let j=0;j<count;j++){
-  const puff=new THREE.Mesh(cloudGeometry,cloudMaterial);
-  puff.position.set(
-   (random()-0.5)*7,
-   random()*1.2,
-   (random()-0.5)*5
-  );
-  puff.scale.set(
-   2.8+random()*3.4,
-   0.75+random()*0.95,
-   2.1+random()*2.5
-  );
-  puff.rotation.y=random()*Math.PI*2;
-  group.add(puff);
- }
-
- group.position.set(
-  (random()-0.5)*270,
-  38+random()*18,
-  (random()-0.5)*270
- );
- group.userData.drift=0.35+random()*0.35;
- clouds.push(group);
- scene.add(group);
+// ノイズを重ねた半透明ビルボード雲。遠景に低く漂う。
+const cloudCanvas=document.createElement("canvas");cloudCanvas.width=128;cloudCanvas.height=128;
+const cloudCtx=cloudCanvas.getContext("2d"),cloudImage=cloudCtx.createImageData(128,128);
+for(let y=0;y<128;y++)for(let x=0;x<128;x++){
+ const dx=(x-63.5)/63.5,dy=(y-63.5)/63.5,radial=Math.max(0,1-Math.sqrt(dx*dx+dy*dy));
+ const n1=hash(x*0.17,y*0.17),n2=hash(x*0.43+19,y*0.43-7),n3=hash(x*0.91-31,y*0.91+13);
+ const wisps=THREE.MathUtils.clamp(radial*0.72+(n1-0.5)*0.24+(n2-0.5)*0.13+(n3-0.5)*0.07,0,1),k=(y*128+x)*4;
+ cloudImage.data[k]=226;cloudImage.data[k+1]=235;cloudImage.data[k+2]=239;cloudImage.data[k+3]=Math.round(Math.pow(wisps,1.65)*210);
 }
-
-
+cloudCtx.putImageData(cloudImage,0,0);
+const cloudTexture=new THREE.CanvasTexture(cloudCanvas);cloudTexture.colorSpace=THREE.SRGBColorSpace;cloudTexture.needsUpdate=true;
+const cloudMaterial=new THREE.SpriteMaterial({map:cloudTexture,transparent:true,opacity:0.72,depthWrite:false,fog:false});
+const clouds=[];
+for(let i=0;i<22;i++){
+ const group=new THREE.Group(),layers=3+Math.floor(random()*3);
+ for(let j=0;j<layers;j++){
+  const cloud=new THREE.Sprite(cloudMaterial.clone());
+  cloud.position.set((random()-0.5)*10,(random()-0.5)*2,(random()-0.5)*5);
+  const width=15+random()*19;cloud.scale.set(width,width*(0.38+random()*0.18),1);
+  cloud.material.opacity=0.38+random()*0.28;group.add(cloud);
+ }
+ group.position.set((random()-0.5)*280,13+random()*15,(random()-0.5)*280);
+ group.userData.drift=0.12+random()*0.18;clouds.push(group);scene.add(group);
+}
 // ===== 文明シミュレーション本体 0.6 =====
 const CELL=4;
 const GRID_CELLS=Math.round(WORLD_SIZE/CELL);
@@ -1346,7 +1348,7 @@ function updateFogMesh(){
  geometry.setAttribute("position",new THREE.Float32BufferAttribute(positions,3));
  geometry.computeVertexNormals();
  const material=new THREE.MeshBasicMaterial({
-  color:0x303b49,transparent:true,opacity:0.995,
+  color:0x526474,transparent:true,opacity:0.998,
   depthWrite:true,side:THREE.DoubleSide
  });
  fogMesh=new THREE.Mesh(geometry,material);
