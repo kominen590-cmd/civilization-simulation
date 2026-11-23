@@ -932,7 +932,7 @@ for(const mesh of [treeTrunks,treeBranches,treeLeaves,treeCanopyUpper,treeCanopy
 treeTrunks.count=treeCount;treeBranches.count=branchCount;treeLeaves.count=treeCount;
 treeCanopyUpper.count=treeCount;treeCanopySide.count=sideCanopyCount;
 for(const mesh of [treeTrunks,treeBranches,treeLeaves,treeCanopyUpper,treeCanopySide])mesh.instanceMatrix.needsUpdate=true;
-for(const mesh of [treeLeaves,treeCanopyUpper,treeCanopySide])if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
+for(const mesh of [treeTrunks,treeBranches,treeLeaves,treeCanopyUpper,treeCanopySide])if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
 scene.add(treeTrunks,treeBranches,treeLeaves,treeCanopyUpper,treeCanopySide);
 
 // 石材鉱床：集落から少し離れた丘陵に、探索して見つける採石候補地を生成する。
