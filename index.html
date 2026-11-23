@@ -1685,7 +1685,7 @@ openingFootpathShape.quadraticCurveTo(-42.2,-26.35,-45.0,-23.45);
 openingFootpathShape.quadraticCurveTo(-47.3,-21.05,-49.75,-19.75);
 openingFootpathShape.closePath();
 const openingFootpathGeometry=new THREE.ShapeGeometry(openingFootpathShape,12);
-openingFootpathGeometry.rotateX(-Math.PI/2);
+openingFootpathGeometry.rotateX(Math.PI/2);
 const openingFootpathMaterial=new THREE.MeshStandardMaterial({
  color:0xffffff,map:buildingTextures.dirt,bumpMap:buildingTextures.dirt,
  bumpScale:0.018,roughness:1,polygonOffset:true,polygonOffsetFactor:-1
