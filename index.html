@@ -885,9 +885,12 @@ for(let i=0;i<MAX_TREES;i++){
  if(data.temperature<0.12||moisture<0.18||(density<0.15&&random()>0.12)||broad<0.30)continue;
  if(random()>(0.20+density*0.60)*(1-data.plains*0.35))continue;
  const scale=0.7+random()*0.65,y=data.height,rotation=random()*Math.PI*2;
+ const canopyWidth=0.91+hash(x+21,z-17)*0.22,canopyHeight=0.92+hash(x-31,z+9)*0.18;
  treeLocations.push({x,z});
  dummy.position.set(x,y+0.6*scale,z);dummy.scale.setScalar(scale);dummy.rotation.set(0,rotation,0);dummy.updateMatrix();
  treeTrunks.setMatrixAt(treeCount,dummy.matrix);
+ const barkTint=new THREE.Color().setHSL(0.075,0.30,0.27+hash(x+5,z+7)*0.10);
+ treeTrunks.setColorAt(treeCount,barkTint);
  // 枝を幹から左右へ伸ばし、樹冠が幹から浮いて見えない構造にする。
  for(const side of [-1,1]){
   branchStart.set(x,y+1.05*scale,z);
@@ -896,17 +899,20 @@ for(let i=0;i<MAX_TREES;i++){
   branchDummy.position.copy(branchStart).add(branchEnd).multiplyScalar(0.5);
   branchDummy.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),branchDirection.clone().normalize());
   branchDummy.scale.set(1,branchDirection.length(),1);branchDummy.updateMatrix();
-  treeBranches.setMatrixAt(branchCount++,branchDummy.matrix);
+  treeBranches.setMatrixAt(branchCount,branchDummy.matrix);
+  treeBranches.setColorAt(branchCount,barkTint.clone().multiplyScalar(0.88));
+  branchCount++;
  }
- dummy.position.set(x,y+2.05*scale,z);dummy.scale.set(1.22*scale,1.48*scale,1.12*scale);dummy.rotation.set(0,rotation,0);dummy.updateMatrix();
+ dummy.position.set(x,y+2.05*scale,z);dummy.scale.set(1.22*scale*canopyWidth,1.48*scale*canopyHeight,1.12*scale*canopyWidth);dummy.rotation.set(0,rotation,0);dummy.updateMatrix();
  treeLeaves.setMatrixAt(treeCount,dummy.matrix);
- dummy.position.set(x-0.22*scale,y+2.82*scale,z+0.08*scale);dummy.scale.set(0.82*scale,1.02*scale,0.82*scale);dummy.rotation.y=rotation+0.65;dummy.updateMatrix();
+ dummy.position.set(x-0.22*scale,y+2.82*scale*canopyHeight,z+0.08*scale);dummy.scale.set(0.82*scale*canopyWidth,1.02*scale*canopyHeight,0.82*scale*canopyWidth);dummy.rotation.y=rotation+0.65;dummy.updateMatrix();
  treeCanopyUpper.setMatrixAt(treeCount,dummy.matrix);
  const leafColor=new THREE.Color();
  if(moisture>0.72)leafColor.setHex(0x244d3c);
  else if(data.temperature<0.28)leafColor.setHex(0x426044);
  else if(moisture<0.32)leafColor.setHex(0x6c7540);
  else leafColor.setHex(0x315b35);
+ leafColor.multiplyScalar(0.88+hash(x+91,z-63)*0.25);
  treeLeaves.setColorAt(treeCount,leafColor);
  treeCanopyUpper.setColorAt(treeCount,leafColor.clone().multiplyScalar(1.10));
  // 左右の樹冠を少しずつずらし、単一の球状シルエットを避ける。
