@@ -1673,6 +1673,27 @@ const buildingMaterials={
  dirt:new THREE.MeshStandardMaterial({color:0xffffff,map:buildingTextures.dirt,bumpMap:buildingTextures.dirt,bumpScale:0.035,roughness:1}),
  plaster:new THREE.MeshStandardMaterial({color:0xffffff,map:buildingTextures.plaster,bumpMap:buildingTextures.plaster,bumpScale:0.025,roughness:0.97})
 };
+
+// 初期集落の住居と畑を結ぶ、細く自然に曲がった踏み固め道。
+// 見た目だけの装飾で、マス判定・建設・移動ルールには影響しない。
+const openingFootpathShape=new THREE.Shape();
+openingFootpathShape.moveTo(-49.0,-18.35);
+openingFootpathShape.quadraticCurveTo(-46.3,-20.0,-44.2,-22.25);
+openingFootpathShape.quadraticCurveTo(-41.6,-25.0,-38.55,-26.15);
+openingFootpathShape.lineTo(-39.12,-27.42);
+openingFootpathShape.quadraticCurveTo(-42.2,-26.35,-45.0,-23.45);
+openingFootpathShape.quadraticCurveTo(-47.3,-21.05,-49.75,-19.75);
+openingFootpathShape.closePath();
+const openingFootpathGeometry=new THREE.ShapeGeometry(openingFootpathShape,12);
+openingFootpathGeometry.rotateX(Math.PI/2);
+const openingFootpathMaterial=new THREE.MeshStandardMaterial({
+ color:0xffffff,map:buildingTextures.dirt,bumpMap:buildingTextures.dirt,
+ bumpScale:0.018,roughness:1,polygonOffset:true,polygonOffsetFactor:-1
+});
+const openingFootpath=new THREE.Mesh(openingFootpathGeometry,openingFootpathMaterial);
+openingFootpath.position.y=0.516;
+openingFootpath.receiveShadow=true;
+scene.add(openingFootpath);
 function makeBuildingMesh(type,x,z){
  const b=buildingTypes[type];
  const group=new THREE.Group();
