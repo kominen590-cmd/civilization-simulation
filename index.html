@@ -308,6 +308,10 @@ container.appendChild(renderer.domElement);
 const controls=new OrbitControls(camera,renderer.domElement);
 controls.enableDamping=true;
 controls.dampingFactor=0.065;
+// iPadでも細かく操作できるよう、カメラ操作速度を抑える
+controls.panSpeed=0.38;
+controls.rotateSpeed=0.42;
+controls.zoomSpeed=0.55;
 // iPad向け：1本指で地形をつかんで移動、2本指でピンチ＋回転
 controls.touches.ONE=THREE.TOUCH.PAN;
 controls.touches.TWO=THREE.TOUCH.DOLLY_ROTATE;
@@ -1342,35 +1346,12 @@ function updateFogMesh(){
  geometry.setAttribute("position",new THREE.Float32BufferAttribute(positions,3));
  geometry.computeVertexNormals();
  const material=new THREE.MeshBasicMaterial({
-  color:0x647487,transparent:true,opacity:0.94,
+  color:0x303b49,transparent:true,opacity:0.995,
   depthWrite:true,side:THREE.DoubleSide
  });
  fogMesh=new THREE.Mesh(geometry,material);
  fogMesh.renderOrder=5;
  scene.add(fogMesh);
-}
-function revealAroundCamera(){
- const cx=worldToCell(controls.target.x),cz=worldToCell(controls.target.z);
- let changed=false;
- for(let dz=-EXPLORATION_RADIUS;dz<=EXPLORATION_RADIUS;dz++){
-  for(let dx=-EXPLORATION_RADIUS;dx<=EXPLORATION_RADIUS;dx++){
-   if(dx*dx+dz*dz>EXPLORATION_RADIUS*EXPLORATION_RADIUS)continue;
-   const ix=cx+dx,iz=cz+dz;
-   if(ix<0||iz<0||ix>=GRID_CELLS||iz>=GRID_CELLS)continue;
-   const p=cellWorldCenter("hut",ix,iz);
-   if(!terrainData(p.x,p.z).land)continue;
-   const key=ix+","+iz;
-   if(!exploredCellSet.has(key)){exploredCellSet.add(key);changed=true;}
-  }
- }
- if(changed){
-  gameState.exploredCells=[...exploredCellSet];
-  updateFogMesh();
-  // 探索目標と次の案内を、霧が晴れたその場で更新する。
-  updateStartGoals();
-  updateFirstBuildHint();
-  saveGame(false);
- }
 }
 function clampCameraToWorld(){
  const worldLimit=HALF-2;
@@ -1389,12 +1370,11 @@ function clampCameraToWorld(){
    minZ=Math.min(minZ,iz);maxZ=Math.max(maxZ,iz);
   }
   if(minX<=maxX&&minZ<=maxZ){
-   // 探索済みの境界から最大3マス先まで移動可能。到達すると周囲の霧が晴れ、行動範囲も広がる。
-   const scout=EXPLORATION_RADIUS;
-   const minWorldX=GRID_ORIGIN+(minX-scout)*CELL;
-   const maxWorldX=GRID_ORIGIN+(maxX+1+scout)*CELL;
-   const minWorldZ=GRID_ORIGIN+(minZ-scout)*CELL;
-   const maxWorldZ=GRID_ORIGIN+(maxZ+1+scout)*CELL;
+   // カメラ移動だけでは探索されない。探索済み範囲の外へは進めない。
+   const minWorldX=GRID_ORIGIN+minX*CELL+CELL*0.5;
+   const maxWorldX=GRID_ORIGIN+(maxX+1)*CELL-CELL*0.5;
+   const minWorldZ=GRID_ORIGIN+minZ*CELL+CELL*0.5;
+   const maxWorldZ=GRID_ORIGIN+(maxZ+1)*CELL-CELL*0.5;
    targetX=THREE.MathUtils.clamp(targetX,minWorldX,maxWorldX);
    targetZ=THREE.MathUtils.clamp(targetZ,minWorldZ,maxWorldZ);
   }
@@ -1402,6 +1382,14 @@ function clampCameraToWorld(){
  const shiftX=targetX-controls.target.x,shiftZ=targetZ-controls.target.z;
  controls.target.x=targetX;controls.target.z=targetZ;
  camera.position.x+=shiftX;camera.position.z+=shiftZ;
+ // 地形の高さを毎フレーム確認し、カメラが地面・崖の内部へ入るのを防ぐ。
+ const groundY=terrainData(camera.position.x,camera.position.z).height;
+ const minCameraY=groundY+5.0;
+ if(camera.position.y<minCameraY){
+  const lift=minCameraY-camera.position.y;
+  camera.position.y+=lift;
+  controls.target.y+=lift;
+ }
 }
 const START_GOALS=[
  {id:"survey",title:"草原のマスを確認する",hint:"選択モードに切り替え、草原のマスをタップして地形と資源適性を確認しましょう。",done:()=>gameState.firstCellSelected},
@@ -2793,7 +2781,6 @@ function animate(now=0){
  controls.update();
  clampCameraToWorld();
  updateResidentLife(delta);
- revealAroundCamera();
  renderer.render(scene,camera);
 }
 animate();
