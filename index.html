@@ -707,11 +707,12 @@ scene.add(terrain);
 // 草地の薄い踏み跡・乾いた土の斑点。輪郭を崩した小さなパッチで地面の単調さを抑える。
 const meadowPatchGeometry=new THREE.CircleGeometry(1,18);
 const patchPositions=meadowPatchGeometry.attributes.position;
-for(let i=0;i<patchPositions.count;i++){
+for(let i=1;i<patchPositions.count;i++){
  const a=Math.atan2(patchPositions.getY(i),patchPositions.getX(i));
  const variation=0.82+hash(i+7001,SEED+7003)*0.28;
  patchPositions.setXY(i,Math.cos(a)*variation,Math.sin(a)*variation);
 }
+meadowPatchGeometry.rotateX(-Math.PI/2);
 meadowPatchGeometry.computeVertexNormals();
 const meadowPatchMaterial=new THREE.MeshStandardMaterial({
  color:0xffffff,roughness:1,transparent:true,opacity:0.17,depthWrite:false,
@@ -728,8 +729,8 @@ for(let i=0;i<64;i++){
  if(!isStartingPlain(px,pz)||Math.hypot(px+48,pz+20)<10||Math.hypot(px+38,pz+28)<8)continue;
  const scale=0.65+hash(i+7121,SEED+7123)*1.75;
  patchDummy.position.set(px,0.508,pz);
- patchDummy.scale.set(scale*(1.1+hash(i+7127,SEED+7129)*0.7),scale*0.55,1);
- patchDummy.rotation.set(0,0,angle);
+ patchDummy.scale.set(scale*(1.1+hash(i+7127,SEED+7129)*0.7),1,scale*0.55);
+ patchDummy.rotation.set(0,angle,0);
  patchDummy.updateMatrix();meadowPatches.setMatrixAt(patchCount,patchDummy.matrix);
  const earthTones=[0x9b8b65,0x827b58,0xa3956c,0x77734f];
  meadowPatches.setColorAt(patchCount,new THREE.Color(earthTones[Math.floor(hash(i+7133,SEED+7139)*earthTones.length)]));
