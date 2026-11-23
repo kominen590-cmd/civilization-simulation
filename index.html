@@ -1353,6 +1353,20 @@ function updateFogMesh(){
  fogMesh.renderOrder=5;
  scene.add(fogMesh);
 }
+function clampPointToExplored(x,z){
+ if(!exploredCellSet.size)return {x,z};
+ let best=null,bestDistance=Infinity;
+ for(const key of exploredCellSet){
+  const [ix,iz]=key.split(",").map(Number);
+  if(!Number.isInteger(ix)||!Number.isInteger(iz)||ix<0||iz<0||ix>=GRID_CELLS||iz>=GRID_CELLS)continue;
+  const minX=GRID_ORIGIN+ix*CELL+0.35,maxX=GRID_ORIGIN+(ix+1)*CELL-0.35;
+  const minZ=GRID_ORIGIN+iz*CELL+0.35,maxZ=GRID_ORIGIN+(iz+1)*CELL-0.35;
+  const px=THREE.MathUtils.clamp(x,minX,maxX),pz=THREE.MathUtils.clamp(z,minZ,maxZ);
+  const distance=(px-x)*(px-x)+(pz-z)*(pz-z);
+  if(distance<bestDistance){bestDistance=distance;best={x:px,z:pz};}
+ }
+ return best||{x,z};
+}
 function clampCameraToWorld(){
  const worldLimit=HALF-2;
  const oldX=camera.position.x,oldZ=camera.position.z;
@@ -1370,18 +1384,18 @@ function clampCameraToWorld(){
    minZ=Math.min(minZ,iz);maxZ=Math.max(maxZ,iz);
   }
   if(minX<=maxX&&minZ<=maxZ){
-   // カメラ移動だけでは探索されない。探索済み範囲の外へは進めない。
-   const minWorldX=GRID_ORIGIN+minX*CELL+CELL*0.5;
-   const maxWorldX=GRID_ORIGIN+(maxX+1)*CELL-CELL*0.5;
-   const minWorldZ=GRID_ORIGIN+minZ*CELL+CELL*0.5;
-   const maxWorldZ=GRID_ORIGIN+(maxZ+1)*CELL-CELL*0.5;
-   targetX=THREE.MathUtils.clamp(targetX,minWorldX,maxWorldX);
-   targetZ=THREE.MathUtils.clamp(targetZ,minWorldZ,maxWorldZ);
+   // カメラ移動だけでは探索されない。探索済みマスの内側に位置を制限する。
+   const safeTarget=clampPointToExplored(targetX,targetZ);
+   targetX=safeTarget.x;
+   targetZ=safeTarget.z;
   }
  }
  const shiftX=targetX-controls.target.x,shiftZ=targetZ-controls.target.z;
  controls.target.x=targetX;controls.target.z=targetZ;
  camera.position.x+=shiftX;camera.position.z+=shiftZ;
+ // 注視点だけでなくカメラ本体も探索済みマス内に保ち、霧の中へ入り込ませない。
+ const safeCamera=clampPointToExplored(camera.position.x,camera.position.z);
+ camera.position.x=safeCamera.x;camera.position.z=safeCamera.z;
  // 地形の高さを毎フレーム確認し、カメラが地面・崖の内部へ入るのを防ぐ。
  const groundY=terrainData(camera.position.x,camera.position.z).height;
  const minCameraY=groundY+5.0;
