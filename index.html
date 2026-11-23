@@ -289,7 +289,7 @@ const random=randomGenerator(SEED);
 
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0xb5cbd2);
-scene.fog=new THREE.Fog(0xb5cbd2,155,390);
+scene.fog=new THREE.Fog(0xb5cbd2,175,420);
 
 const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,700);
 camera.position.set(17,75,67);
@@ -299,7 +299,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
 renderer.setSize(innerWidth,innerHeight);
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.02;
+renderer.toneMappingExposure=1.04;
 renderer.physicallyCorrectLights=true;
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -317,7 +317,7 @@ controls.minDistance=12;
 controls.maxDistance=230;
 controls.target.set(-48,0,-18);
 
-scene.add(new THREE.HemisphereLight(0xeaf2f5,0x58634c,1.55));
+scene.add(new THREE.HemisphereLight(0xeaf2f5,0x59634b,1.62));
 const fillLight=new THREE.DirectionalLight(0xc4d7e4,0.42);
 fillLight.position.set(75,38,-65);
 scene.add(fillLight);
@@ -704,6 +704,43 @@ const terrain=new THREE.Mesh(
 terrain.receiveShadow=true;
 scene.add(terrain);
 
+// 草地の薄い踏み跡・乾いた土の斑点。輪郭を崩した小さなパッチで地面の単調さを抑える。
+const meadowPatchGeometry=new THREE.CircleGeometry(1,18);
+const patchPositions=meadowPatchGeometry.attributes.position;
+for(let i=1;i<patchPositions.count;i++){
+ const a=Math.atan2(patchPositions.getY(i),patchPositions.getX(i));
+ const variation=0.82+hash(i+7001,SEED+7003)*0.28;
+ patchPositions.setXY(i,Math.cos(a)*variation,Math.sin(a)*variation);
+}
+meadowPatchGeometry.rotateX(-Math.PI/2);
+meadowPatchGeometry.computeVertexNormals();
+const meadowPatchMaterial=new THREE.MeshStandardMaterial({
+ color:0xffffff,roughness:1,transparent:true,opacity:0.17,depthWrite:false,
+ polygonOffset:true,polygonOffsetFactor:-1
+});
+const meadowPatches=new THREE.InstancedMesh(meadowPatchGeometry,meadowPatchMaterial,64);
+const patchDummy=new THREE.Object3D();
+let patchCount=0;
+for(let i=0;i<64;i++){
+ const angle=hash(i+7101,SEED+7103)*Math.PI*2;
+ const radius=11+Math.sqrt(hash(i+7109,SEED+7111))*25;
+ const px=START_PLAIN.x+Math.cos(angle)*radius*1.08;
+ const pz=START_PLAIN.z+Math.sin(angle)*radius*0.82;
+ if(!isStartingPlain(px,pz)||Math.hypot(px+48,pz+20)<10||Math.hypot(px+38,pz+28)<8)continue;
+ const scale=0.65+hash(i+7121,SEED+7123)*1.75;
+ patchDummy.position.set(px,0.508,pz);
+ patchDummy.scale.set(scale*(1.1+hash(i+7127,SEED+7129)*0.7),1,scale*0.55);
+ patchDummy.rotation.set(0,angle,0);
+ patchDummy.updateMatrix();meadowPatches.setMatrixAt(patchCount,patchDummy.matrix);
+ const earthTones=[0x9b8b65,0x827b58,0xa3956c,0x77734f];
+ meadowPatches.setColorAt(patchCount,new THREE.Color(earthTones[Math.floor(hash(i+7133,SEED+7139)*earthTones.length)]));
+ patchCount++;
+}
+meadowPatches.count=patchCount;
+meadowPatches.instanceMatrix.needsUpdate=true;
+if(meadowPatches.instanceColor)meadowPatches.instanceColor.needsUpdate=true;
+meadowPatches.castShadow=false;meadowPatches.receiveShadow=true;scene.add(meadowPatches);
+
 // ひな壇の段差面。隣接頂点の高さが異なる場所に垂直な土壁を重ね、坂ではなく段として見せる。
 const terraceWallPositions=[];
 function addTerraceWall(a,b){
@@ -767,8 +804,8 @@ for(const lake of lakes){
 
 // 川：陸地上の区間だけ描画
 const riverMaterial=new THREE.MeshPhysicalMaterial({
- color:0x397f9f,roughness:0.19,metalness:0.015,
- clearcoat:0.4,clearcoatRoughness:0.18,
+ color:0x438eaa,roughness:0.14,metalness:0.01,
+ clearcoat:0.58,clearcoatRoughness:0.14,
  bumpMap:surfaceBump,bumpScale:0.045
 });
 for(const curve of riverCurves){
@@ -788,16 +825,17 @@ for(const curve of riverCurves){
 
  for(const points of segments){
   const c=new THREE.CatmullRomCurve3(points);
-  const bank=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),1.45,7,false),new THREE.MeshStandardMaterial({color:0x8e9970,roughness:1}));
-  const mesh=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),1.02,9,false),riverMaterial);
-  scene.add(bank,mesh);
+  const bank=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),1.52,8,false),new THREE.MeshStandardMaterial({color:0x78845e,roughness:1}));
+  const gravel=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),1.12,9,false),new THREE.MeshStandardMaterial({color:0xb2a27c,roughness:1}));
+  const mesh=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*2),0.99,12,false),riverMaterial);
+  scene.add(bank,gravel,mesh);
  }
 }
 
 // 森林：群落を作る
 const trunkGeometry=new THREE.CylinderGeometry(0.11,0.2,1.25,9);
 const branchGeometry=new THREE.CylinderGeometry(0.045,0.085,1,7);
-const leafGeometry=new THREE.IcosahedronGeometry(0.88,1);
+const leafGeometry=new THREE.SphereGeometry(0.88,10,8);
 const trunkMaterial=new THREE.MeshStandardMaterial({color:0x705039,roughness:0.96});
 const branchMaterial=new THREE.MeshStandardMaterial({color:0x62442f,roughness:1});
 const leafMaterial=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.92});
@@ -1009,7 +1047,7 @@ for(let i=0;i<2200;i++){
  if(!d.land||["sea","river","lake","beach","snow","mountain"].includes(d.kind))continue;
  if(!isStartingPlain(x,z)&&forestDensity(x,z)<0.08&&hash(i+991,SEED+7)>0.22)continue;
  grassDummy.position.set(x,d.height+0.2,z);
- const size=0.45+hash(i+41,SEED+13)*0.8;
+ const size=0.42+hash(i+41,SEED+13)*0.92;
  grassDummy.scale.set(size,size*(0.85+hash(i+43,SEED+15)*0.35),size);
  grassDummy.rotation.set(0,hash(i+57,SEED+19)*Math.PI*2,0);
  grassDummy.updateMatrix();grass.setMatrixAt(grassCount,grassDummy.matrix);
@@ -1024,12 +1062,12 @@ for(let i=0;i<4200;i++){
  const px=START_PLAIN.x+Math.cos(angle)*radius*37;
  const pz=START_PLAIN.z+Math.sin(angle)*radius*29;
  if(!isStartingPlain(px,pz)||Math.hypot(px+48,pz+20)<9.5||Math.hypot(px+38,pz+28)<7.5)continue;
- const size=0.38+hash(i+3301,SEED+3307)*0.82;
+ const size=0.32+hash(i+3301,SEED+3307)*1.02;
  grassDummy.position.set(px,0.69,pz);
  grassDummy.scale.set(size,size*(0.82+hash(i+3311,SEED+3313)*0.45),size);
  grassDummy.rotation.set(0,hash(i+3323,SEED+3329)*Math.PI*2,0);
  grassDummy.updateMatrix();grass.setMatrixAt(grassCount,grassDummy.matrix);
- const tint=new THREE.Color().setHSL(0.19+hash(i+3331,SEED+3337)*0.045,0.30+hash(i+3341,SEED+3343)*0.22,0.30+hash(i+3347,SEED+3359)*0.12);
+ const tint=new THREE.Color().setHSL(0.17+hash(i+3331,SEED+3337)*0.075,0.27+hash(i+3341,SEED+3343)*0.25,0.25+hash(i+3347,SEED+3359)*0.17);
  grass.setColorAt(grassCount,tint);grassCount++;
 }
 grass.count=grassCount;grass.instanceMatrix.needsUpdate=true;
@@ -1885,10 +1923,13 @@ function addRoadMesh(ix,iz){
  const center=cellWorldCenter("hut",ix,iz),y=terrainData(center.x,center.z).height+0.09;
  const tile=new THREE.Group();
  const roadShape=new THREE.Shape();
- roadShape.moveTo(-1.72,-1.35);roadShape.lineTo(-1.35,-1.68);
- roadShape.lineTo(1.42,-1.55);roadShape.lineTo(1.73,-1.16);
- roadShape.lineTo(1.58,1.38);roadShape.lineTo(1.18,1.68);
- roadShape.lineTo(-1.48,1.53);roadShape.lineTo(-1.72,1.12);roadShape.closePath();
+ roadShape.moveTo(-1.98,-1.42);roadShape.lineTo(-1.70,-1.91);
+ roadShape.lineTo(-0.82,-1.98);roadShape.lineTo(0.42,-1.90);
+ roadShape.lineTo(1.72,-1.96);roadShape.lineTo(1.98,-1.48);
+ roadShape.lineTo(1.91,-0.36);roadShape.lineTo(1.98,0.88);
+ roadShape.lineTo(1.66,1.94);roadShape.lineTo(0.44,1.90);
+ roadShape.lineTo(-0.82,1.98);roadShape.lineTo(-1.94,1.58);
+ roadShape.lineTo(-1.90,0.36);roadShape.closePath();
  const roadGeometry=new THREE.ShapeGeometry(roadShape,2);roadGeometry.rotateX(-Math.PI/2);
  const mesh=new THREE.Mesh(roadGeometry,roadSurfaceMat);
  mesh.position.y=0.055;mesh.receiveShadow=true;tile.add(mesh);
