@@ -264,6 +264,43 @@ import {OrbitControls} from "three/addons/controls/OrbitControls.js";
 
 const container=document.getElementById("game");
 const savedWorldSettings=(()=>{try{return JSON.parse(localStorage.getItem("civilizationNewGameSettingsV1")||"{}")}catch(e){return {}}})();
+// タイトルの開始操作は重いワールド生成より先に登録し、iPadでも即座に反応させる。
+document.getElementById("hitNewGame").addEventListener("click",()=>{
+ const values={
+  worldSize: savedWorldSettings.worldSize||"medium",
+  resources: savedWorldSettings.resources||"normal",
+  civCount: savedWorldSettings.civCount||"normal",
+  disaster: savedWorldSettings.disaster||"normal"
+ };
+ document.getElementById("worldSizeSelect").value=values.worldSize;
+ document.getElementById("resourcesSelect").value=values.resources;
+ document.getElementById("civCountSelect").value=values.civCount;
+ document.getElementById("disasterSelect").value=values.disaster;
+ document.querySelectorAll(".titleSubscreen").forEach(el=>el.classList.remove("active"));
+ document.getElementById("newGameScreen").classList.add("active");
+});
+document.getElementById("startNewWorldButton").addEventListener("click",()=>{
+ const settings={
+  worldSize:document.getElementById("worldSizeSelect").value,
+  resources:document.getElementById("resourcesSelect").value,
+  civCount:document.getElementById("civCountSelect").value,
+  disaster:document.getElementById("disasterSelect").value
+ };
+ try{
+  localStorage.setItem("civilizationNewGameSettingsV1",JSON.stringify(settings));
+  const newSeed=Math.floor(Math.random()*2147483646)+1;
+  localStorage.setItem("civilizationWorldSeedV6",String(newSeed));
+  localStorage.setItem("civilizationPendingNewGameV1","1");
+  const button=document.getElementById("startNewWorldButton");
+  button.disabled=true;button.textContent="世界を準備中...";
+  location.reload();
+ }catch(e){
+  const message=document.getElementById("message");
+  message.textContent="新しい世界を準備できませんでした。ブラウザの保存領域を確認してください";
+  message.classList.add("show");
+ }
+});
+
 const WORLD_SIZE=({small:180,medium:220,large:280,xlarge:340}[savedWorldSettings.worldSize]||220);
 const HALF=WORLD_SIZE/2;
 const GRID=Math.round(WORLD_SIZE*0.82);
@@ -2685,7 +2722,7 @@ function openNewGameSettings(){
  document.getElementById("disasterSelect").value=settings.disaster||"normal";
  showTitleSection("newGameScreen");
 }
-document.getElementById("hitNewGame").addEventListener("click",openNewGameSettings);
+// ニューゲームのクリック処理は初期化冒頭で登録済み。
 document.getElementById("hitContinue").addEventListener("click",()=>{
  if(hasCurrentSave())enterGame("continue");
  else showMessage("この世界のセーブデータはまだありません。");
@@ -2702,23 +2739,7 @@ document.getElementById("hitSaveManage").addEventListener("click",()=>{
 document.getElementById("hitHowTo").addEventListener("click",()=>showTitleSection("howToScreen"));
 document.getElementById("hitCredits").addEventListener("click",()=>showTitleSection("creditsScreen"));
 // タイトルメニュー各ボタンから、それぞれ対応する画面へ直接遷移する。
-document.getElementById("startNewWorldButton").addEventListener("click",()=>{
- const settings={
-  worldSize:document.getElementById("worldSizeSelect").value,
-  resources:document.getElementById("resourcesSelect").value,
-  civCount:document.getElementById("civCountSelect").value,
-  disaster:document.getElementById("disasterSelect").value
- };
- try{
-  localStorage.setItem("civilizationNewGameSettingsV1",JSON.stringify(settings));
-  const newSeed=Math.floor(Math.random()*2147483646)+1;
-  localStorage.setItem("civilizationWorldSeedV6",String(newSeed));
-  localStorage.setItem("civilizationPendingNewGameV1","1");
-  const button=document.getElementById("startNewWorldButton");
-  button.disabled=true;button.textContent="世界を準備中...";
-  location.reload();
- }catch(e){showMessage("新しい世界を準備できませんでした。ブラウザの保存領域を確認してください");}
-});
+// 世界生成ボタンの処理も初期化冒頭で登録済み。
 document.getElementById("settingsContinueButton").addEventListener("click",()=>{
  if(hasCurrentSave())enterGame("continue");
 });
