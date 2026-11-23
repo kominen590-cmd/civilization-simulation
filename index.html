@@ -1641,16 +1641,41 @@ function buildMenu(){
  });
  root.appendChild(roadButton);
 }
-// 建築・道路で共用する、軽量な手続き型表面テクスチャ
+// 建築・道路用の継ぎ目が目立たない高精細な手続き型表面テクスチャ。
 function makeSurfaceTexture(kind){
- const size=64,pixels=new Uint8Array(size*size*4);
+ const size=128,pixels=new Uint8Array(size*size*4);
+ const smoothT=t=>t*t*(3-2*t);
+ const periodicNoise=(x,y,cell)=>{
+  const cells=size/cell,fx=x/cell,fy=y/cell,ix=Math.floor(fx),iy=Math.floor(fy);
+  const tx=smoothT(fx-ix),ty=smoothT(fy-iy);
+  const wrap=n=>((n%cells)+cells)%cells;
+  const a=hash(wrap(ix)+kind.length*17,wrap(iy)+kind.length*29);
+  const b=hash(wrap(ix+1)+kind.length*17,wrap(iy)+kind.length*29);
+  const c=hash(wrap(ix)+kind.length*17,wrap(iy+1)+kind.length*29);
+  const d=hash(wrap(ix+1)+kind.length*17,wrap(iy+1)+kind.length*29);
+  return THREE.MathUtils.lerp(THREE.MathUtils.lerp(a,b,tx),THREE.MathUtils.lerp(c,d,tx),ty);
+ };
  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-  const n=hash(x*1.7+(kind.length*13),y*2.1+kind.length*7);
-  const grain=kind==="wood"?(Math.sin(y*1.9+Math.sin(x*0.32)*2)+1)*0.5:
-   kind==="roof"?(Math.sin((y+Math.floor(x/8)*2)*1.25)+1)*0.5:
-   kind==="stone"?(Math.sin(x*0.7+y*0.43)+1)*0.5:
-   kind==="fabric"?(Math.sin(x*1.65)*Math.sin(y*1.65)+1)*0.5:n;
-  const v=0.72+n*0.22+grain*0.12,k=(y*size+x)*4;
+  const broad=periodicNoise(x,y,32),medium=periodicNoise(x,y,8),fine=periodicNoise(x,y,2);
+  const u=x/size,v=y/size;
+  let grain;
+  if(kind==="wood"){
+   grain=(Math.sin(v*Math.PI*2*18+Math.sin(u*Math.PI*2*5)*1.35)+1)*0.5;
+  }else if(kind==="roof"){
+   const row=Math.floor(v*24),shift=(row%2)*0.5;
+   const tile=Math.cos((u*12+shift)*Math.PI*2);
+   grain=0.58+0.24*Math.sin(v*Math.PI*2*24)+0.18*tile;
+  }else if(kind==="stone"){
+   grain=periodicNoise(x,y,16)*0.55+Math.sin((u*7+v*5)*Math.PI*2)*0.15+fine*0.30;
+  }else if(kind==="fabric"){
+   grain=(Math.sin(u*Math.PI*2*48)*Math.sin(v*Math.PI*2*48)+1)*0.5;
+  }else if(kind==="dirt"){
+   grain=medium*0.55+fine*0.45;
+  }else{
+   grain=broad*0.35+medium*0.4+fine*0.25;
+  }
+  const variation=0.78+broad*0.10+medium*0.12+fine*0.045+grain*0.08;
+  const k=(y*size+x)*4;
   let c;
   if(kind==="wood")c=[112,75,45];
   else if(kind==="roof")c=[91,57,43];
@@ -1658,12 +1683,15 @@ function makeSurfaceTexture(kind){
   else if(kind==="dirt")c=[119,91,61];
   else if(kind==="fabric")c=[174,164,143];
   else c=[190,178,151];
-  pixels[k]=Math.min(255,c[0]*v);pixels[k+1]=Math.min(255,c[1]*v);
-  pixels[k+2]=Math.min(255,c[2]*v);pixels[k+3]=255;
+  pixels[k]=Math.min(255,c[0]*variation);
+  pixels[k+1]=Math.min(255,c[1]*variation);
+  pixels[k+2]=Math.min(255,c[2]*variation);
+  pixels[k+3]=255;
  }
  const texture=new THREE.DataTexture(pixels,size,size,THREE.RGBAFormat);
  texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
  texture.colorSpace=THREE.SRGBColorSpace;
+ texture.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
  texture.needsUpdate=true;
  return texture;
 }
