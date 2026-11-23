@@ -885,9 +885,12 @@ for(let i=0;i<MAX_TREES;i++){
  if(data.temperature<0.12||moisture<0.18||(density<0.15&&random()>0.12)||broad<0.30)continue;
  if(random()>(0.20+density*0.60)*(1-data.plains*0.35))continue;
  const scale=0.7+random()*0.65,y=data.height,rotation=random()*Math.PI*2;
+ const canopyWidth=0.91+hash(x+21,z-17)*0.22,canopyHeight=0.92+hash(x-31,z+9)*0.18;
  treeLocations.push({x,z});
  dummy.position.set(x,y+0.6*scale,z);dummy.scale.setScalar(scale);dummy.rotation.set(0,rotation,0);dummy.updateMatrix();
  treeTrunks.setMatrixAt(treeCount,dummy.matrix);
+ const barkTint=new THREE.Color().setHSL(0.075,0.30,0.27+hash(x+5,z+7)*0.10);
+ treeTrunks.setColorAt(treeCount,barkTint);
  // 枝を幹から左右へ伸ばし、樹冠が幹から浮いて見えない構造にする。
  for(const side of [-1,1]){
   branchStart.set(x,y+1.05*scale,z);
@@ -896,17 +899,20 @@ for(let i=0;i<MAX_TREES;i++){
   branchDummy.position.copy(branchStart).add(branchEnd).multiplyScalar(0.5);
   branchDummy.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),branchDirection.clone().normalize());
   branchDummy.scale.set(1,branchDirection.length(),1);branchDummy.updateMatrix();
-  treeBranches.setMatrixAt(branchCount++,branchDummy.matrix);
+  treeBranches.setMatrixAt(branchCount,branchDummy.matrix);
+  treeBranches.setColorAt(branchCount,barkTint.clone().multiplyScalar(0.88));
+  branchCount++;
  }
- dummy.position.set(x,y+2.05*scale,z);dummy.scale.set(1.22*scale,1.48*scale,1.12*scale);dummy.rotation.set(0,rotation,0);dummy.updateMatrix();
+ dummy.position.set(x,y+2.05*scale,z);dummy.scale.set(1.22*scale*canopyWidth,1.48*scale*canopyHeight,1.12*scale*canopyWidth);dummy.rotation.set(0,rotation,0);dummy.updateMatrix();
  treeLeaves.setMatrixAt(treeCount,dummy.matrix);
- dummy.position.set(x-0.22*scale,y+2.82*scale,z+0.08*scale);dummy.scale.set(0.82*scale,1.02*scale,0.82*scale);dummy.rotation.y=rotation+0.65;dummy.updateMatrix();
+ dummy.position.set(x-0.22*scale,y+2.82*scale*canopyHeight,z+0.08*scale);dummy.scale.set(0.82*scale*canopyWidth,1.02*scale*canopyHeight,0.82*scale*canopyWidth);dummy.rotation.y=rotation+0.65;dummy.updateMatrix();
  treeCanopyUpper.setMatrixAt(treeCount,dummy.matrix);
  const leafColor=new THREE.Color();
  if(moisture>0.72)leafColor.setHex(0x244d3c);
  else if(data.temperature<0.28)leafColor.setHex(0x426044);
  else if(moisture<0.32)leafColor.setHex(0x6c7540);
  else leafColor.setHex(0x315b35);
+ leafColor.multiplyScalar(0.88+hash(x+91,z-63)*0.25);
  treeLeaves.setColorAt(treeCount,leafColor);
  treeCanopyUpper.setColorAt(treeCount,leafColor.clone().multiplyScalar(1.10));
  // 左右の樹冠を少しずつずらし、単一の球状シルエットを避ける。
@@ -926,7 +932,7 @@ for(const mesh of [treeTrunks,treeBranches,treeLeaves,treeCanopyUpper,treeCanopy
 treeTrunks.count=treeCount;treeBranches.count=branchCount;treeLeaves.count=treeCount;
 treeCanopyUpper.count=treeCount;treeCanopySide.count=sideCanopyCount;
 for(const mesh of [treeTrunks,treeBranches,treeLeaves,treeCanopyUpper,treeCanopySide])mesh.instanceMatrix.needsUpdate=true;
-for(const mesh of [treeLeaves,treeCanopyUpper,treeCanopySide])if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
+for(const mesh of [treeTrunks,treeBranches,treeLeaves,treeCanopyUpper,treeCanopySide])if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
 scene.add(treeTrunks,treeBranches,treeLeaves,treeCanopyUpper,treeCanopySide);
 
 // 石材鉱床：集落から少し離れた丘陵に、探索して見つける採石候補地を生成する。
@@ -1674,6 +1680,22 @@ const buildingMaterials={
  plaster:new THREE.MeshStandardMaterial({color:0xffffff,map:buildingTextures.plaster,bumpMap:buildingTextures.plaster,bumpScale:0.025,roughness:0.97})
 };
 
+// 建物共通の細部素材・形状。共有して余分なGPUリソース生成を抑える。
+const timberDarkMaterial=new THREE.MeshStandardMaterial({color:0x493629,roughness:0.98});
+const windowGlassMaterial=new THREE.MeshStandardMaterial({color:0x78969a,roughness:0.28,metalness:0.04});
+const cropLeafMaterials=[
+ new THREE.MeshStandardMaterial({color:0x557b39,roughness:1}),
+ new THREE.MeshStandardMaterial({color:0x718a3f,roughness:1}),
+ new THREE.MeshStandardMaterial({color:0x8a8a42,roughness:1})
+];
+const gableShape=new THREE.Shape();
+gableShape.moveTo(-0.5,0);gableShape.lineTo(0.5,0);gableShape.lineTo(0,1);gableShape.closePath();
+const gableGeometry=new THREE.ShapeGeometry(gableShape);
+const farmFurrowGeometry=new THREE.BoxGeometry(1,0.025,0.045);
+const farmStoneGeometry=new THREE.DodecahedronGeometry(0.12,0);
+const smallBarrelGeometry=new THREE.CylinderGeometry(0.19,0.22,0.48,9);
+const stumpGeometry=new THREE.CylinderGeometry(0.22,0.27,0.42,9);
+
 // 初期集落の住居と畑を結ぶ、細く自然に曲がった踏み固め道。
 // 見た目だけの装飾で、マス判定・建設・移動ルールには影響しない。
 const openingFootpathShape=new THREE.Shape();
@@ -1712,6 +1734,19 @@ function makeBuildingMesh(type,x,z){
  );
  body.position.y=baseY+0.45+height/2;group.add(body);
  if(type==="hut"||type==="store"){
+  // 切妻屋根の妻壁を三角形で補い、屋根下に空洞が見えないようにする。
+  const gableMaterial=buildingMaterials.plaster;
+  const frontZ=footprint*0.82*0.5+0.018;
+  for(const faceSide of [-1,1]){
+   const gable=new THREE.Mesh(gableGeometry,gableMaterial);
+   gable.scale.set(footprint*0.82,footprint*0.27,1);
+   gable.position.set(0,baseY+0.45+height-0.015,faceSide*frontZ);
+   if(faceSide<0)gable.rotation.y=Math.PI;
+   gable.castShadow=true;group.add(gable);
+   const trim=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.88,0.075,0.075),buildingMaterials.wood);
+   trim.position.set(0,baseY+0.45+height+0.025,faceSide*frontZ);
+   group.add(trim);
+  }
   // 切妻屋根：左右の屋根面、棟木、軒先を分けて実際の屋根構造に近づける。
   const roofY=baseY+0.45+height+0.28,roofAngle=0.57;
   for(const side of [-1,1]){
@@ -1752,7 +1787,7 @@ function makeBuildingMesh(type,x,z){
    const hinge=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.045,0.025),buildingMaterials.stone);
    hinge.position.set(-0.17,hingeY,frontZ+0.055);group.add(hinge);
   }
-  const windowMat=new THREE.MeshStandardMaterial({color:0x8fa7a2,roughness:0.38,metalness:0.08});
+  const windowMat=windowGlassMaterial;
   for(const side of [-1,1]){
    const windowY=baseY+0.45+height*0.64,windowX=side*footprint*0.23;
    const windowMesh=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.34,0.055),windowMat);
@@ -1771,6 +1806,13 @@ function makeBuildingMesh(type,x,z){
    const crossH=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.035,0.065),buildingMaterials.wood);
    crossH.position.set(windowX,windowY,frontZ+0.047);group.add(crossH);
   }
+  // 側面にも柱と土台梁を通し、木組みの立体感を出す。
+  for(const sideX of [-1,1]){
+   const sidePost=new THREE.Mesh(new THREE.BoxGeometry(0.105,height*0.96,0.105),timberDarkMaterial);
+   sidePost.position.set(sideX*footprint*0.34,baseY+0.45+height/2,0);group.add(sidePost);
+   const sideBeam=new THREE.Mesh(new THREE.BoxGeometry(0.10,0.085,footprint*0.72),buildingMaterials.wood);
+   sideBeam.position.set(sideX*footprint*0.34,baseY+0.45+height*0.22,0);group.add(sideBeam);
+  }
   // 正面の水平梁で壁面の木組みを補強。
   for(const beamY of [baseY+0.45+height*0.28,baseY+0.45+height*0.82]){
    const beam=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.72,0.085,0.11),buildingMaterials.wood);
@@ -1783,13 +1825,16 @@ function makeBuildingMesh(type,x,z){
    const rowZ=(rowIndex-1.5)*0.55;
    const soil=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.74,0.16,0.34),buildingMaterials.dirt);
    soil.position.set(0,baseY+0.55,rowZ);group.add(soil);
-   const row=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.72,0.09,0.13),new THREE.MeshStandardMaterial({color:0x526c36,roughness:1}));
+   const row=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.72,0.09,0.13),cropLeafMaterials[rowIndex%cropLeafMaterials.length]);
    row.position.set(0,baseY+0.66,rowZ);group.add(row);
+   const furrow=new THREE.Mesh(farmFurrowGeometry,buildingMaterials.dirt);
+   furrow.scale.set(footprint*0.72,1,1);
+   furrow.position.set(0,baseY+0.49,rowZ+0.24);group.add(furrow);
    for(let plantIndex=0;plantIndex<6;plantIndex++){
     const plant=new THREE.Group();
     const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.055,1,5),new THREE.MeshStandardMaterial({color:0x688c3d,roughness:1}));
     stem.position.y=0.5;plant.add(stem);
-    const leaf=new THREE.Mesh(new THREE.BoxGeometry(0.28,0.045,0.07),new THREE.MeshStandardMaterial({color:0x47743a,roughness:1}));
+    const leaf=new THREE.Mesh(new THREE.BoxGeometry(0.28,0.045,0.07),cropLeafMaterials[(rowIndex+plantIndex)%cropLeafMaterials.length]);
     leaf.position.set(0.08,0.42,0);leaf.rotation.z=-0.35;plant.add(leaf);
     const head=new THREE.Mesh(new THREE.SphereGeometry(0.095,6,5),new THREE.MeshStandardMaterial({color:0xc5a64c,roughness:1}));
     head.position.y=1.02;plant.add(head);
@@ -1807,6 +1852,12 @@ function makeBuildingMesh(type,x,z){
     rail.position.set(0,baseY+railY,side*footprint*0.43);group.add(rail);
    }
   }
+  for(let stoneIndex=0;stoneIndex<8;stoneIndex++){
+   const stone=new THREE.Mesh(farmStoneGeometry,buildingMaterials.stone);
+   const side=stoneIndex%2===0?-1:1,rowIndex=Math.floor(stoneIndex/2);
+   stone.position.set(side*(footprint*0.39),baseY+0.54,(-1.5+rowIndex)*0.78);
+   stone.scale.setScalar(0.55+((stoneIndex*7)%4)*0.12);group.add(stone);
+  }
   group.userData.cropPlants=cropPlants;
  }
  if(type==="woodcutter"){
@@ -1820,6 +1871,12 @@ function makeBuildingMesh(type,x,z){
   }
   const awning=new THREE.Mesh(new THREE.BoxGeometry(footprint*0.72,0.16,0.62),buildingMaterials.roof);
   awning.position.set(0,baseY+1.95,footprint*0.35);group.add(awning);
+  const stump=new THREE.Mesh(stumpGeometry,buildingMaterials.wood);
+  stump.position.set(-footprint*0.34,baseY+0.66,footprint*0.36);group.add(stump);
+  const barrel=new THREE.Mesh(smallBarrelGeometry,buildingMaterials.wood);
+  barrel.position.set(footprint*0.34,baseY+0.69,footprint*0.37);group.add(barrel);
+  const barrelBand=new THREE.Mesh(new THREE.TorusGeometry(0.205,0.025,5,12),timberDarkMaterial);
+  barrelBand.rotation.x=Math.PI/2;barrelBand.position.set(footprint*0.34,baseY+0.79,footprint*0.37);group.add(barrelBand);
  }
  if(type==="quarry"){
   const stoneMat=buildingMaterials.stone;
@@ -1852,6 +1909,10 @@ function makeBuildingMesh(type,x,z){
   beam.position.y=baseY+2.12;group.add(beam);
   const spindle=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,0.95,8),timber);
   spindle.rotation.z=Math.PI/2;spindle.position.set(0,baseY+1.7,0);group.add(spindle);
+  const rope=new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,0.62,6),timberDarkMaterial);
+  rope.position.set(0,baseY+1.35,0);group.add(rope);
+  const bucket=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.12,0.22,8),buildingMaterials.wood);
+  bucket.position.set(0,baseY+0.53,0.52);group.add(bucket);
  }
  if(type==="plaza"){
   const stone=new THREE.MeshStandardMaterial({color:0xa9a28f,roughness:1});
@@ -1870,8 +1931,12 @@ function makeBuildingMesh(type,x,z){
   }
   const planter=new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.42,0.28,8),stone);
   planter.position.set(0,baseY+0.72,0);group.add(planter);
-  const shrub=new THREE.Mesh(new THREE.IcosahedronGeometry(0.38,1),new THREE.MeshStandardMaterial({color:0x527744,roughness:1}));
+  const shrub=new THREE.Mesh(new THREE.SphereGeometry(0.38,9,7),new THREE.MeshStandardMaterial({color:0x527744,roughness:1}));
   shrub.position.set(0,baseY+1.12,0);group.add(shrub);
+  for(let joint=-1;joint<=1;joint++){
+   const line=new THREE.Mesh(new THREE.BoxGeometry(0.025,0.012,1.82),timberDarkMaterial);
+   line.position.set(joint*0.94,baseY+0.575,0);group.add(line);
+  }
  }
  if(type==="hut"||type==="store"){
   const chimney=new THREE.Mesh(new THREE.BoxGeometry(0.32,1.05,0.32),buildingMaterials.stone);
